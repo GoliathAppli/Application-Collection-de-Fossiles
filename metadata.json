@@ -1,0 +1,6 @@
+{
+  "name": "Ma collection de fossiles",
+  "description": "Application mobile pour répertorier des fossiles (gestion locale).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
