@@ -46,309 +46,324 @@ interface FossilFormViewProps {
   onBack: () => void;
   onHome: () => void;
   onDelete?: (id: string) => void;
+  isLight?: boolean;
 }
 
-export default function FossilFormView({ period, existingFossil, onSave, onBack, onHome, onDelete }: FossilFormViewProps) {
-  const [isEditing, setIsEditing] = useState<boolean>(!existingFossil);
-  const [showPeriodInfo, setShowPeriodInfo] = useState<string | null>(null);
-  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  const [techSheet, setTechSheet] = useState<Partial<TechnicalSheet>>({
-    typeSheet: 'achat',
+export default function FossilFormView({ period, existingFossil, onSave, onBack, onHome, onDelete, isLight = false }: FossilFormViewProps) {
+  const [isEditing, setIsEditing] = useState(!existingFossil);
+  const [fossil, setFossil] = useState<Fossil>(() => {
+    if (existingFossil) {
+      return {
+        ...existingFossil,
+        detailedPeriodStart: existingFossil.detailedPeriodStart || existingFossil.period,
+        detailedPeriodEnd: existingFossil.detailedPeriodEnd || existingFossil.period,
+        speciesType: existingFossil.speciesType || 'animal',
+        descriptionImages: Array.isArray(existingFossil.descriptionImages) ? existingFossil.descriptionImages : [],
+        speciesImages: Array.isArray(existingFossil.speciesImages)
+          ? existingFossil.speciesImages
+          : existingFossil.animalImage
+          ? [existingFossil.animalImage]
+          : []
+      };
+    }
+    return {
+      id: uuidv4(),
+      period,
+      detailedPeriodStart: period,
+      detailedPeriodEnd: period,
+      title: '',
+      reference: '',
+      carouselImage: '',
+      mainImage: '',
+      description: '',
+      descriptionImages: [],
+      discoveryLocation: '',
+      discoveryLat: undefined,
+      discoveryLng: undefined,
+      animalOrigin: '',
+      alimentation: '',
+      speciesSize: '',
+      speciesType: 'animal',
+      animalImage: '',
+      speciesImages: [],
+      fossilDating: ''
+    };
+  });
+
+  const [techSheet, setTechSheet] = useState<TechnicalSheet>({
+    id: uuidv4(),
+    nom: '',
+    nomPhoto: '',
+    provenance: '',
+    periode: period,
+    fossilDating: '',
     dateAchat: '',
     lieuAchat: '',
-    certificat: '',
+    certificat: 'non',
     certificatPhoto: '',
     prix: 0,
+    typeSheet: 'achat',
     datePrelevement: '',
     lieuPrelevement: ''
   });
 
   useEffect(() => {
-    if (existingFossil) {
-      getSheets().then(sheets => {
-        const sheet = sheets.find(s => s.id === existingFossil.id);
-        if (sheet) {
-          setTechSheet(sheet);
-        }
-      });
-    }
-  }, [existingFossil]);
+    getSheets().then(sheets => {
+      const match = sheets.find(s => s.fossilId === fossil.id || (fossil.title && s.nom === fossil.title));
+      if (match) {
+        setTechSheet({
+          ...match,
+          typeSheet: match.typeSheet || 'achat'
+        });
+      } else {
+        setTechSheet(prev => ({
+          ...prev,
+          fossilId: fossil.id,
+          nom: fossil.title,
+          nomPhoto: fossil.carouselImage || fossil.mainImage,
+          provenance: fossil.discoveryLocation,
+          periode: fossil.period,
+          fossilDating: fossil.fossilDating || ''
+        }));
+      }
+    });
+  }, [fossil.id]);
 
-  const updateTechSheet = (field: keyof TechnicalSheet, value: any) => {
-    setTechSheet(prev => ({ ...prev, [field]: value }));
-  };
-
-  const [fossil, setFossil] = useState<Fossil>(existingFossil || {
-    id: uuidv4(),
-    period: period,
-    carouselImage: '',
-    title: '',
-    mainImage: '',
-    reference: '',
-    description: '',
-    descriptionImages: [],
-    discoveryLocation: '',
-    discoveryLat: undefined,
-    discoveryLng: undefined,
-    animalOrigin: '',
-    animalImage: '',
-    alimentation: '',
-    speciesType: 'animal',
-    speciesImages: [],
-    speciesSize: '',
-    fossilDating: '',
-    didYouKnowText: '',
-    didYouKnowImage: ''
-  });
-
-  const printRef = useRef<HTMLDivElement>(null);
-
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [showPeriodInfo, setShowPeriodInfo] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeStatus, setGeocodeStatus] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (fossil && fossil.id) {
-      import('../store').then(({ saveLastActiveFossilId }) => {
-        saveLastActiveFossilId(fossil.id);
-      });
-    }
-  }, [fossil.id]);
-
-  const handleGeocode = async (text: string) => {
-    if (!text || !text.trim()) return;
-    
-    // Clean up typical entries (e.g. "Shark Bay, Australie" -> "Shark Bay, Australie")
-    // Split by common non-address indicators like dates, collection info, bracketed comments
-    const cleanedText = text.replace(/(trouvé|découvert|achat|coll|ref|date|an|le\s+\d).*$/i, '').trim();
-    const query = cleanedText.split(/[\n,;-\d]/)[0].trim() || cleanedText || text.trim();
-    if (!query || query.length < 2) return;
-
-    setIsGeocoding(true);
-    setGeocodeStatus("Recherche du lieu sur la carte...");
-
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'FossilCollectorApp/1.0 (contact: fabien.piazza@hotmail.fr)'
-          }
-        }
-      );
-      
-      if (!response.ok) throw new Error("Erreur réseau");
-      const results = await response.json();
-      
-      if (results && results.length > 0) {
-        const item = results[0];
-        const lat = parseFloat(item.lat);
-        const lng = parseFloat(item.lon);
-        
-        update('discoveryLat', lat);
-        update('discoveryLng', lng);
-        
-        const shortName = item.display_name.split(',').slice(0, 2).join(', ');
-        setGeocodeStatus(`📍 Carte centrée sur : ${shortName}`);
-      } else {
-        // Fallback to searching the original text
-        const secondResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text.trim())}&limit=1`,
-          {
-            headers: {
-              'User-Agent': 'FossilCollectorApp/1.0 (contact: fabien.piazza@hotmail.fr)'
-            }
-          }
-        );
-        const secondResults = await secondResponse.json();
-        if (secondResults && secondResults.length > 0) {
-          const item = secondResults[0];
-          const lat = parseFloat(item.lat);
-          const lng = parseFloat(item.lon);
-          update('discoveryLat', lat);
-          update('discoveryLng', lng);
-          const shortName = item.display_name.split(',').slice(0, 2).join(', ');
-          setGeocodeStatus(`📍 Carte centrée sur : ${shortName}`);
-        } else {
-          setGeocodeStatus("⚠️ Lieu introuvable sur la carte");
-        }
-      }
-    } catch (e) {
-      console.error(e);
-      setGeocodeStatus("⚠️ Problème de connexion pour la recherche");
-    } finally {
-      setIsGeocoding(false);
-    }
-  };
-
-  const handlePrint = () => {
-    window.focus();
-    setTimeout(() => {
-      window.print();
-    }, 100);
-  };
+  const printRef = useRef<HTMLDivElement>(null);
 
   const update = (field: keyof Fossil, value: any) => {
     setFossil(prev => ({ ...prev, [field]: value }));
   };
 
-  const addDescriptionImage = (img: string) => {
-    if (fossil.descriptionImages.length < 6) {
-      update('descriptionImages', [...fossil.descriptionImages, img]);
+  const updateTechSheet = (field: keyof TechnicalSheet, value: any) => {
+    setTechSheet(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleGeocode = async (locName: string) => {
+    if (!locName || !locName.trim()) return;
+    setIsGeocoding(true);
+    setGeocodeStatus(null);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        update('discoveryLat', lat);
+        update('discoveryLng', lon);
+        setGeocodeStatus(`Position trouvée : ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+      } else {
+        setGeocodeStatus("Lieu non trouvé. Vous pouvez pointer manuellement sur la carte.");
+      }
+    } catch (e) {
+      setGeocodeStatus("Erreur lors de la recherche. Vous pouvez pointer manuellement.");
+    } finally {
+      setIsGeocoding(false);
     }
   };
 
-  const removeDescriptionImage = (index: number) => {
-    const newImages = [...fossil.descriptionImages];
-    newImages.splice(index, 1);
-    update('descriptionImages', newImages);
+  const addDescriptionImage = (url: string) => {
+    if (!url) return;
+    const current = Array.isArray(fossil.descriptionImages) ? fossil.descriptionImages : [];
+    update('descriptionImages', [...current, url]);
   };
 
-  const addSpeciesImage = (img: string) => {
-    const images = fossil.speciesImages || [];
-    update('speciesImages', [...images, img]);
+  const removeDescriptionImage = (index: number) => {
+    const current = Array.isArray(fossil.descriptionImages) ? fossil.descriptionImages : [];
+    update('descriptionImages', current.filter((_, i) => i !== index));
+  };
+
+  const addSpeciesImage = (url: string) => {
+    if (!url) return;
+    const current = fossil.speciesImages || [];
+    update('speciesImages', [...current, url]);
+  };
+
+  const removeSpeciesImage = (index: number) => {
+    const current = fossil.speciesImages || [];
+    update('speciesImages', current.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
+    onSave(fossil);
+    
+    // Save or update technical sheet
     const sheets = await getSheets();
-    const existingIndex = sheets.findIndex(s => s.id === fossil.id);
+    const existingIndex = sheets.findIndex(s => s.fossilId === fossil.id || (fossil.title && s.nom === fossil.title));
     
     const updatedSheet: TechnicalSheet = {
-      id: fossil.id,
+      ...techSheet,
+      fossilId: fossil.id,
       nom: fossil.title,
-      nomPhoto: fossil.carouselImage || fossil.mainImage,
-      provenance: fossil.discoveryLocation,
-      periode: fossil.period,
-      fossilDating: fossil.fossilDating || '',
-      typeSheet: techSheet.typeSheet || 'achat',
-      dateAchat: techSheet.typeSheet === 'prelevement' ? '' : (techSheet.dateAchat || ''),
-      lieuAchat: techSheet.typeSheet === 'prelevement' ? '' : (techSheet.lieuAchat || ''),
-      certificat: techSheet.typeSheet === 'prelevement' ? '' : (techSheet.certificat || ''),
-      certificatPhoto: techSheet.typeSheet === 'prelevement' ? '' : (techSheet.certificatPhoto || ''),
-      prix: techSheet.typeSheet === 'prelevement' ? 0 : (techSheet.prix || 0),
-      datePrelevement: techSheet.typeSheet === 'prelevement' ? (techSheet.datePrelevement || '') : '',
-      lieuPrelevement: techSheet.typeSheet === 'prelevement' ? (techSheet.lieuPrelevement || '') : ''
+      nomPhoto: fossil.carouselImage || fossil.mainImage || techSheet.nomPhoto,
+      provenance: fossil.discoveryLocation || techSheet.provenance,
+      periode: fossil.period || techSheet.periode,
+      fossilDating: fossil.fossilDating || techSheet.fossilDating,
+      typeSheet: techSheet.typeSheet || 'achat'
     };
-    
+
     if (existingIndex >= 0) {
       sheets[existingIndex] = updatedSheet;
     } else {
       sheets.push(updatedSheet);
     }
     await saveSheets(sheets);
-    
-    onSave(fossil);
     setIsEditing(false);
   };
 
-  const removeSpeciesImage = (index: number) => {
-    const images = [...(fossil.speciesImages || [])];
-    images.splice(index, 1);
-    update('speciesImages', images);
+  const handlePrint = () => {
+    setIsEditing(false);
+    window.focus();
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const renderEditMode = () => (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="bg-[#101A36]/60 border border-[#D4AF37]/25 p-4 rounded-2xl shadow-xl">
-        <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Image du carrousel</label>
-        <ImageUpload 
-          value={fossil.carouselImage} 
-          onChange={val => update('carouselImage', val)} 
-          className="h-32 w-32 object-contain"
-        />
+    <div className="w-full max-w-4xl mx-auto space-y-8 animate-fade-in pb-12 px-2 sm:px-0">
+      
+      {/* Visual Identity */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <h3 className={`text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Identité du Spécimen</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Titre / Nom du fossile</label>
+            <input
+              type="text"
+              value={fossil.title}
+              onChange={e => update('title', e.target.value)}
+              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+              placeholder="Ex: Dactylioceras commune"
+            />
+          </div>
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Référence d'inventaire</label>
+            <input
+              type="text"
+              value={fossil.reference || ''}
+              onChange={e => update('reference', e.target.value)}
+              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+              placeholder="Ex: FOS-2023-001"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Photo de couverture / Carrousel</label>
+            <div className="flex justify-center">
+              <ImageUpload
+                value={fossil.carouselImage || ''}
+                onChange={val => update('carouselImage', val)}
+                onRemove={() => update('carouselImage', '')}
+                className={`w-full h-48 object-contain rounded-2xl ${isLight ? 'bg-slate-50' : 'bg-[#060B1A]/50'}`}
+              />
+            </div>
+          </div>
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Photo principale (Grand format)</label>
+            <div className="flex justify-center">
+              <ImageUpload
+                value={fossil.mainImage || ''}
+                onChange={val => update('mainImage', val)}
+                onRemove={() => update('mainImage', '')}
+                className={`w-full h-48 object-contain rounded-2xl ${isLight ? 'bg-slate-50' : 'bg-[#060B1A]/50'}`}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl">
-        <input 
-          type="text" 
-          value={fossil.title}
-          onChange={e => update('title', e.target.value)}
-          placeholder="Titre du fossile"
-          className="w-full text-3xl font-serif border-b border-[#D4AF37]/30 focus:border-[#D4AF37] focus:outline-none mb-6 p-2 bg-transparent text-white placeholder-slate-500"
-        />
+      {/* Stratigraphic Period Selection */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <h3 className={`text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Période Géologique & Datation</h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Période géologique (Début)</label>
+            <select
+              value={fossil.detailedPeriodStart || fossil.period}
+              onChange={e => {
+                const val = e.target.value as Period;
+                update('detailedPeriodStart', val);
+                update('period', val);
+                if (!fossil.detailedPeriodEnd) update('detailedPeriodEnd', val);
+              }}
+              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+            >
+              {allSubPeriods.map(sub => (
+                <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
+              ))}
+            </select>
+          </div>
 
-        <ImageUpload 
-          value={fossil.mainImage} 
-          onChange={val => update('mainImage', val)} 
-          className="w-full h-64 md:h-96 mb-4 object-contain"
-        />
+          <div>
+            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Période géologique (Fin - Optionnelle)</label>
+            <select
+              value={fossil.detailedPeriodEnd || fossil.detailedPeriodStart || fossil.period}
+              onChange={e => update('detailedPeriodEnd', e.target.value as Period)}
+              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+            >
+              {allSubPeriods.map(sub => (
+                <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-        <input 
-           type="text"
-           value={fossil.reference}
-           onChange={e => update('reference', e.target.value)}
-           placeholder="Référence (ex: FOS-001)"
-           className="w-full max-w-sm p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans"
-        />
+        <div>
+          <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Datation exacte ou estimation d'âge</label>
+          <input
+            type="text"
+            value={fossil.fossilDating || ''}
+            onChange={e => update('fossilDating', e.target.value)}
+            className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+            placeholder="Ex: ~180 Millions d'années (Toarcien inférieur)"
+          />
+        </div>
       </div>
 
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl">
-        <h3 className="text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest text-[#D4AF37] border-b border-[#D4AF37]/30 pb-2 inline-block">Description du fossile</h3>
+      {/* Detailed Description & Images */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <h3 className={`text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Description & Photos Additionnelles</h3>
+        <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Texte descriptif</label>
         <textarea
           value={fossil.description}
           onChange={e => update('description', e.target.value)}
-          className="w-full p-4 border border-[#D4AF37]/25 min-h-[120px] mb-4 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans resize-y"
+          className={`w-full p-4 border min-h-[140px] mb-6 rounded-xl font-sans resize-y outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+          placeholder="Détails scientifiques, anatomiques, historique de la pièce..."
         />
+
+        <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Photos complémentaires</label>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          {fossil.descriptionImages.map((img, i) => (
-            <div key={i} className="relative shrink-0 border border-[#D4AF37]/20 bg-[#060B1A]/50 rounded-xl overflow-hidden p-1">
+          {(fossil.descriptionImages || []).map((img, i) => (
+            <div key={i} className={`relative shrink-0 border rounded-xl overflow-hidden p-1 ${isLight ? 'border-slate-300 bg-slate-100' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
               <img src={img} alt="" className="w-24 h-24 object-contain" />
               <button onClick={() => removeDescriptionImage(i)} className="absolute -top-2 -right-2 bg-red-800 text-white p-1 hover:bg-red-700 transition-colors rounded-full">
                 <Trash2 size={12} />
               </button>
             </div>
           ))}
-          {fossil.descriptionImages.length < 6 && (
-            <div className="w-26 h-26 shrink-0 border border-dashed border-[#D4AF37]/45 rounded-xl p-1 hover:bg-white/10 transition-all cursor-pointer">
-              <ImageUpload value="" onChange={addDescriptionImage} className="w-24 h-24 object-contain" icon={<Plus className="text-[#D4AF37]" />} />
-            </div>
-          )}
+          <div className={`w-26 h-26 shrink-0 border border-dashed rounded-xl p-1 transition-all cursor-pointer ${isLight ? 'border-slate-300 hover:bg-slate-100' : 'border-[#D4AF37]/45 hover:bg-white/10'}`}>
+            <ImageUpload value="" onChange={addDescriptionImage} className="w-24 h-24 object-contain" icon={<Plus className={isLight ? 'text-black' : 'text-[#D4AF37]'} />} />
+          </div>
         </div>
       </div>
 
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl">
-         <h3 className="text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest text-[#D4AF37] border-b border-[#D4AF37]/30 pb-2 inline-block">Datation (Echelle des temps)</h3>
-         <input 
-            type="text" 
-            value={fossil.fossilDating}
-            onChange={e => update('fossilDating', e.target.value)}
-            placeholder="Ex: -150 Millions d'années"
-            className="w-full p-3 mb-4 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
-         />
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Période de début</label>
-              <select 
-                value={fossil.detailedPeriodStart || ''} 
-                onChange={e => update('detailedPeriodStart', e.target.value)}
-                className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans"
-              >
-                <option value="" className="bg-[#101A36] text-slate-400">Sélectionner...</option>
-                {allSubPeriods.map(p => <option key={p} value={p} className="bg-[#101A36] text-white">{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Période de fin (Optionnel)</label>
-              <select 
-                value={fossil.detailedPeriodEnd || ''} 
-                onChange={e => update('detailedPeriodEnd', e.target.value)}
-                className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans"
-              >
-                <option value="" className="bg-[#101A36] text-slate-400">Sélectionner...</option>
-                {allSubPeriods.map(p => <option key={p} value={p} className="bg-[#101A36] text-white">{p}</option>)}
-              </select>
-            </div>
-         </div>
-      </div>
-
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl flex flex-col gap-4">
-        <h3 className="text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest text-[#D4AF37] border-b border-[#D4AF37]/30 pb-2 inline-block">Lieu et date de découverte</h3>
+      {/* Discovery Location & Interactive Map */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl space-y-4 transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <h3 className={`text-lg md:text-xl font-serif font-bold uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Lieu de Découverte (Carte Interactive)</h3>
         <textarea
           value={fossil.discoveryLocation}
           onChange={e => update('discoveryLocation', e.target.value)}
           onBlur={e => handleGeocode(e.target.value)}
-          className="w-full p-4 border border-[#D4AF37]/25 min-h-[80px] focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans resize-y placeholder-slate-500"
+          className={`w-full p-4 border min-h-[80px] rounded-xl font-sans resize-y outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
           placeholder="Nom du lieu (ex: Millau, Aveyron, France) et autres détails..."
         />
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -356,22 +371,24 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
             type="button"
             onClick={() => handleGeocode(fossil.discoveryLocation)}
             disabled={isGeocoding || !fossil.discoveryLocation.trim()}
-            className="px-4 py-2 bg-[#D4AF37]/20 hover:bg-[#D4AF37]/35 text-[#D4AF37] font-serif uppercase tracking-widest text-xs font-bold rounded-xl border border-[#D4AF37]/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className={`px-4 py-2 font-serif uppercase tracking-widest text-xs font-bold rounded-xl border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+              isLight ? 'bg-slate-100 hover:bg-slate-200 text-black border-slate-300' : 'bg-[#D4AF37]/20 hover:bg-[#D4AF37]/35 text-[#D4AF37] border-[#D4AF37]/30'
+            }`}
           >
             {isGeocoding ? (
               <>
-                <span className="animate-spin inline-block w-3 h-3 border-2 border-[#D4AF37] border-t-transparent rounded-full"></span>
+                <span className="animate-spin inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full"></span>
                 Localisation en cours...
               </>
             ) : "🔍 Pointer sur la carte automatiquement"}
           </button>
           {geocodeStatus && (
-            <span className={`text-xs font-sans italic ${geocodeStatus.includes('⚠️') ? 'text-red-400' : 'text-emerald-400'}`}>
+            <span className={`text-xs font-sans italic ${geocodeStatus.includes('⚠️') ? 'text-red-500' : 'text-emerald-600'}`}>
               {geocodeStatus}
             </span>
           )}
         </div>
-        <div className="h-64 w-full bg-[#060B1A] border border-[#D4AF37]/25 rounded-2xl overflow-hidden relative z-0">
+        <div className={`h-64 w-full border rounded-2xl overflow-hidden relative z-0 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/25'}`}>
           <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full">
             <ChangeView center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} />
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -383,21 +400,22 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
             />
           </MapContainer>
         </div>
-        <p className="text-xs text-slate-400 italic">Cliquez sur la carte pour définir le point exact de la découverte s'il n'est pas déjà pointé.</p>
+        <p className={`text-xs italic ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Cliquez sur la carte pour définir le point exact de la découverte s'il n'est pas déjà pointé.</p>
       </div>
 
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-[#D4AF37]/30 pb-4">
-          <h3 className="text-lg md:text-xl font-serif font-bold uppercase tracking-widest text-[#D4AF37]">Espèce</h3>
-          <div className="flex mt-4 sm:mt-0 border border-[#D4AF37]/25 rounded-xl overflow-hidden">
+      {/* Species info */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/30'}`}>
+          <h3 className={`text-lg md:text-xl font-serif font-bold uppercase tracking-widest ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Espèce</h3>
+          <div className={`flex mt-4 sm:mt-0 border rounded-xl overflow-hidden ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/25'}`}>
             <button
-              className={`px-4 py-2 font-serif uppercase tracking-widest text-xs transition-colors ${fossil.speciesType === 'animal' || !fossil.speciesType ? 'bg-[#D4AF37] text-[#060B1A] font-bold' : 'bg-transparent text-slate-300 hover:bg-white/10'}`}
+              className={`px-4 py-2 font-serif uppercase tracking-widest text-xs transition-colors ${fossil.speciesType === 'animal' || !fossil.speciesType ? (isLight ? 'bg-black text-white font-bold' : 'bg-[#D4AF37] text-[#060B1A] font-bold') : (isLight ? 'bg-transparent text-slate-700 hover:bg-slate-100' : 'bg-transparent text-slate-300 hover:bg-white/10')}`}
               onClick={() => update('speciesType', 'animal')}
             >
               Animale
             </button>
             <button
-              className={`px-4 py-2 font-serif uppercase tracking-widest text-xs transition-colors ${fossil.speciesType === 'vegetal' ? 'bg-[#D4AF37] text-[#060B1A] font-bold' : 'bg-transparent text-slate-300 hover:bg-white/10'}`}
+              className={`px-4 py-2 font-serif uppercase tracking-widest text-xs transition-colors ${fossil.speciesType === 'vegetal' ? (isLight ? 'bg-black text-white font-bold' : 'bg-[#D4AF37] text-[#060B1A] font-bold') : (isLight ? 'bg-transparent text-slate-700 hover:bg-slate-100' : 'bg-transparent text-slate-300 hover:bg-white/10')}`}
               onClick={() => update('speciesType', 'vegetal')}
             >
               Végétale
@@ -405,39 +423,39 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
           </div>
         </div>
 
-        <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Description</label>
+        <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Description</label>
         <textarea
           value={fossil.animalOrigin}
           onChange={e => update('animalOrigin', e.target.value)}
-          className="w-full p-4 border border-[#D4AF37]/25 min-h-[80px] mb-6 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans resize-y"
+          className={`w-full p-4 border min-h-[80px] mb-6 rounded-xl font-sans resize-y outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
         />
 
         {fossil.speciesType !== 'vegetal' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Alimentation</label>
+              <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Alimentation</label>
               <textarea
                 value={fossil.alimentation}
                 onChange={e => update('alimentation', e.target.value)}
-                className="w-full p-4 border border-[#D4AF37]/25 min-h-[80px] focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans resize-y"
+                className={`w-full p-4 border min-h-[80px] rounded-xl font-sans resize-y outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
               />
             </div>
             <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Taille</label>
+              <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Taille</label>
               <input
                 type="text"
                 value={fossil.speciesSize || ''}
                 onChange={e => update('speciesSize', e.target.value)}
-                className="w-full p-4 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans"
+                className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
               />
             </div>
           </div>
         )}
 
-        <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Photos (Carrousel)</label>
+        <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Photos (Carrousel)</label>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {fossil.animalImage && !(fossil.speciesImages?.length) && (
-            <div className="relative shrink-0 border border-[#D4AF37]/20 bg-[#060B1A]/50 rounded-xl overflow-hidden p-1">
+            <div className={`relative shrink-0 border rounded-xl overflow-hidden p-1 ${isLight ? 'border-slate-300 bg-slate-100' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
               <img src={fossil.animalImage} alt="" className="w-24 h-24 object-contain" />
               <button onClick={() => update('animalImage', '')} className="absolute -top-2 -right-2 bg-red-800 text-white p-1 hover:bg-red-700 transition-colors rounded-full">
                 <Trash2 size={12} />
@@ -445,37 +463,38 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
             </div>
           )}
           {(fossil.speciesImages || []).map((img, i) => (
-            <div key={i} className="relative shrink-0 border border-[#D4AF37]/20 bg-[#060B1A]/50 rounded-xl overflow-hidden p-1">
+            <div key={i} className={`relative shrink-0 border rounded-xl overflow-hidden p-1 ${isLight ? 'border-slate-300 bg-slate-100' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
               <img src={img} alt="" className="w-24 h-24 object-contain" />
               <button onClick={() => removeSpeciesImage(i)} className="absolute -top-2 -right-2 bg-red-800 text-white p-1 hover:bg-red-700 transition-colors rounded-full">
                 <Trash2 size={12} />
               </button>
             </div>
           ))}
-          <div className="w-26 h-26 shrink-0 border border-dashed border-[#D4AF37]/45 rounded-xl p-1 hover:bg-white/10 transition-all cursor-pointer">
-            <ImageUpload value="" onChange={addSpeciesImage} className="w-24 h-24 object-contain" icon={<Plus className="text-[#D4AF37]" />} />
+          <div className={`w-26 h-26 shrink-0 border border-dashed rounded-xl p-1 transition-all cursor-pointer ${isLight ? 'border-slate-300 hover:bg-slate-100' : 'border-[#D4AF37]/45 hover:bg-white/10'}`}>
+            <ImageUpload value="" onChange={addSpeciesImage} className="w-24 h-24 object-contain" icon={<Plus className={isLight ? 'text-black' : 'text-[#D4AF37]'} />} />
           </div>
         </div>
       </div>
 
-      <div className="border border-[#D4AF37]/25 p-6 md:p-8 bg-[#101A36]/60 rounded-3xl shadow-xl">
-        <h3 className="text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest text-[#D4AF37] border-b border-[#D4AF37]/30 pb-2 inline-block">Informations Fiche Technique</h3>
-        <p className="text-sm font-sans text-slate-300 mb-6 italic">Ces informations seront automatiquement ajoutées au tableau dans l'onglet "Fiches Techniques".</p>
+      {/* Technical Sheet Infos */}
+      <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
+        <h3 className={`text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Informations Fiche Technique</h3>
+        <p className={`text-sm font-sans mb-6 italic ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Ces informations seront automatiquement ajoutées au tableau dans l'onglet "Fiches Techniques".</p>
         
         {/* Choice of sheet type */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 sm:items-center border-b border-[#D4AF37]/25 pb-4">
-          <span className="block text-sm font-serif uppercase tracking-widest text-slate-300 font-semibold">Type de fiche technique :</span>
+        <div className={`mb-6 flex flex-col sm:flex-row gap-4 sm:items-center border-b pb-4 ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/25'}`}>
+          <span className={`block text-sm font-serif uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Type de fiche technique :</span>
           <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer font-sans text-sm text-slate-200 bg-[#060B1A]/80 px-4 py-2 rounded-xl border border-[#D4AF37]/20 hover:border-[#D4AF37]/45 transition-colors">
+            <label className={`flex items-center gap-2 cursor-pointer font-sans text-sm px-4 py-2 rounded-xl border transition-colors ${isLight ? 'bg-slate-50 border-slate-300 text-black' : 'bg-[#060B1A]/80 border-[#D4AF37]/20 text-slate-200'}`}>
               <input 
                 type="radio" 
                 checked={(techSheet.typeSheet || 'achat') === 'achat'} 
                 onChange={() => updateTechSheet('typeSheet', 'achat')} 
-                className="accent-[#D4AF37] w-4 h-4" 
+                className="accent-black w-4 h-4" 
               /> 
-              <span className="font-semibold text-white">💰 Fiche d'Achat</span>
+              <span className={`font-semibold ${isLight ? 'text-black' : 'text-white'}`}>💰 Fiche d'Achat</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer font-sans text-sm text-slate-200 bg-[#060B1A]/80 px-4 py-2 rounded-xl border border-[#D4AF37]/20 hover:border-[#D4AF37]/45 transition-colors">
+            <label className={`flex items-center gap-2 cursor-pointer font-sans text-sm px-4 py-2 rounded-xl border transition-colors ${isLight ? 'bg-slate-50 border-slate-300 text-black' : 'bg-[#060B1A]/80 border-[#D4AF37]/20 text-slate-200'}`}>
               <input 
                 type="radio" 
                 checked={techSheet.typeSheet === 'prelevement'} 
@@ -485,95 +504,94 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                     updateTechSheet('lieuPrelevement', fossil.discoveryLocation);
                   }
                 }} 
-                className="accent-[#D4AF37] w-4 h-4" 
+                className="accent-black w-4 h-4" 
               /> 
-              <span className="font-semibold text-white">⛏️ Fiche de Prélèvement</span>
+              <span className={`font-semibold ${isLight ? 'text-black' : 'text-white'}`}>⛏️ Fiche de Prélèvement</span>
             </label>
           </div>
         </div>
 
         {(techSheet.typeSheet || 'achat') === 'prelevement' ? (
-          // Fiche prelevement edit
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-4 animate-fade-in">
             <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Date de découverte / prélèvement</label>
+              <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Date de découverte / prélèvement</label>
               <input 
                 type="text"
                 value={techSheet.datePrelevement || ''}
                 onChange={e => updateTechSheet('datePrelevement', e.target.value)}
-                className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
+                className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                 placeholder="Ex: Printemps 2018, ou 15/06/2021"
               />
             </div>
             <div>
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Lieu précis de prélèvement</label>
+              <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Lieu précis de prélèvement</label>
               <input 
                 type="text"
                 value={techSheet.lieuPrelevement || ''}
                 onChange={e => updateTechSheet('lieuPrelevement', e.target.value)}
-                className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
+                className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                 placeholder="Ex: Carrière de calcaire, Millau"
               />
             </div>
           </div>
         ) : (
-          // Fiche achat edit (current structure)
           <div className="animate-fade-in">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
               <div>
-                <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Date d'achat</label>
+                <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Date d'achat</label>
                 <input 
                   type="text"
                   value={techSheet.dateAchat || ''}
                   onChange={e => updateTechSheet('dateAchat', e.target.value)}
-                  className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
+                  className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                   placeholder="Ex: 12/05/2023"
                 />
               </div>
               <div>
-                <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Lieu d'achat</label>
+                <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Lieu d'achat</label>
                 <input 
                   type="text"
                   value={techSheet.lieuAchat || ''}
                   onChange={e => updateTechSheet('lieuAchat', e.target.value)}
-                  className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
+                  className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                   placeholder="Ex: Bourse aux minéraux de Paris"
                 />
               </div>
               <div>
-                <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Prix d'achat (€)</label>
+                <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Prix d'achat (€)</label>
                 <input 
                   type="number"
                   value={techSheet.prix || ''}
                   onChange={e => updateTechSheet('prix', Number(e.target.value))}
-                  className="w-full p-3 border border-[#D4AF37]/25 focus:outline-none focus:border-[#D4AF37] bg-[#060B1A]/70 text-white rounded-xl font-sans placeholder-slate-500"
+                  className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                   placeholder="Ex: 150"
                 />
               </div>
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Certificat d'authenticité</label>
+              <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Certificat d'authenticité</label>
               <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer font-sans text-sm text-slate-200">
-                  <input type="radio" checked={techSheet.certificat === 'oui'} onChange={() => updateTechSheet('certificat', 'oui')} className="accent-[#D4AF37] w-4 h-4" /> 
-                  <span>Oui</span>
+                <label className="flex items-center gap-2 cursor-pointer font-sans text-sm">
+                  <input type="radio" checked={techSheet.certificat === 'oui'} onChange={() => updateTechSheet('certificat', 'oui')} className="accent-black w-4 h-4" /> 
+                  <span className={isLight ? 'text-black' : 'text-slate-200'}>Oui</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-sans text-sm text-slate-200">
-                  <input type="radio" checked={techSheet.certificat === 'non'} onChange={() => updateTechSheet('certificat', 'non')} className="accent-[#D4AF37] w-4 h-4" /> 
-                  <span>Non</span>
+                <label className="flex items-center gap-2 cursor-pointer font-sans text-sm">
+                  <input type="radio" checked={techSheet.certificat === 'non'} onChange={() => updateTechSheet('certificat', 'non')} className="accent-black w-4 h-4" /> 
+                  <span className={isLight ? 'text-black' : 'text-slate-200'}>Non</span>
                 </label>
               </div>
             </div>
             
             {techSheet.certificat === 'oui' && (
               <div>
-                <label className="block text-sm font-serif mb-2 uppercase tracking-widest text-slate-300 font-semibold">Photo du certificat</label>
+                <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Photo du certificat</label>
                 <div className="w-full max-w-sm">
                    <ImageUpload 
                      value={techSheet.certificatPhoto || ''} 
                      onChange={val => updateTechSheet('certificatPhoto', val)}
-                     className="w-full h-48 object-contain"
+                     onRemove={() => updateTechSheet('certificatPhoto', '')}
+                     className={`w-full h-48 object-contain rounded-xl ${isLight ? 'bg-slate-50' : 'bg-[#060B1A]'}`}
                    />
                 </div>
               </div>
@@ -590,35 +608,35 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       
       {/* Museum Header */}
       <div className="text-center space-y-4">
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif text-[#D4AF37] uppercase tracking-widest break-words whitespace-normal px-2 font-bold drop-shadow-md">
+        <h1 className={`text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-widest break-words whitespace-normal px-2 font-bold drop-shadow-md ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
           {fossil.title || 'Sans titre'}
         </h1>
         {fossil.reference && (
-          <p className="text-sm font-sans text-slate-400 tracking-widest uppercase">
+          <p className={`text-sm font-sans tracking-widest uppercase ${isLight ? 'text-slate-600 font-bold' : 'text-slate-400'}`}>
             Réf: {fossil.reference}
           </p>
         )}
       </div>
 
       {fossil.mainImage && (
-        <div className="border-2 border-[#D4AF37]/30 rounded-3xl overflow-hidden p-2 bg-[#101A36]/50 shadow-2xl">
+        <div className={`border-2 rounded-3xl overflow-hidden p-2 shadow-2xl ${isLight ? 'bg-white border-slate-200' : 'bg-[#101A36]/50 border-[#D4AF37]/30'}`}>
           <img src={fossil.mainImage} alt={fossil.title} className="w-full max-h-[800px] object-contain cursor-pointer rounded-2xl" onClick={() => setEnlargedImage(fossil.mainImage)} />
         </div>
       )}
 
       {/* Main Description */}
       {fossil.description && (
-        <div className="border-2 border-[#D4AF37]/30 p-8 md:p-12 relative bg-[#101A36]/60 rounded-3xl mt-12 shadow-xl">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#101A36] px-8 py-2 border-x-2 border-b-2 border-t-2 sm:border-t-0 border-[#D4AF37]/30 rounded-b-2xl shadow-md">
-             <span className="font-serif uppercase tracking-widest text-[#D4AF37] text-xl sm:text-2xl font-bold">Description</span>
+        <div className={`border-2 p-8 md:p-12 relative rounded-3xl mt-12 shadow-xl ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+          <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-8 py-2 border rounded-b-2xl shadow-md ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#101A36] border-[#D4AF37]/30'}`}>
+             <span className={`font-serif uppercase tracking-widest text-xl sm:text-2xl font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Description</span>
           </div>
-          <p className="font-sans text-lg text-white/95 leading-relaxed whitespace-pre-wrap mt-6">
+          <p className={`font-sans text-lg leading-relaxed whitespace-pre-wrap mt-6 font-medium ${isLight ? 'text-black' : 'text-white/95'}`}>
             {fossil.description}
           </p>
-          {fossil.descriptionImages.length > 0 && (
+          {(fossil.descriptionImages || []).length > 0 && (
             <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {fossil.descriptionImages.map((img, i) => (
-                <div key={i} className="border border-[#D4AF37]/20 p-1 shadow-md bg-[#060B1A] rounded-xl overflow-hidden">
+              {(fossil.descriptionImages || []).map((img, i) => (
+                <div key={i} className={`border p-1 shadow-md rounded-xl overflow-hidden ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
                   <img src={img} alt="" className="w-full h-32 object-contain cursor-pointer hover:scale-105 transition-all" onClick={() => setEnlargedImage(img)} />
                 </div>
               ))}
@@ -628,23 +646,23 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       )}
 
       {/* Timescale Widget */}
-      <div className="border-2 border-[#D4AF37]/30 py-8 md:py-12 bg-[#101A36]/60 print:hidden shadow-xl my-12 animate-fade-in delay-200 rounded-3xl overflow-hidden">
+      <div className={`border-2 py-8 md:py-12 print:hidden shadow-xl my-12 animate-fade-in delay-200 rounded-3xl overflow-hidden ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
          <div className="text-center px-4">
-            <span className="text-[10px] font-serif uppercase tracking-widest text-[#D4AF37] font-extrabold bg-[#D4AF37]/10 px-3 py-1 rounded-full border border-[#D4AF37]/25">
+            <span className={`text-[10px] font-serif uppercase tracking-widest font-extrabold px-3 py-1 rounded-full border ${isLight ? 'bg-slate-100 text-black border-slate-300' : 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/25'}`}>
               🧭 Chronologie de la Terre
             </span>
-            <h3 className="font-serif uppercase tracking-widest text-[#D4AF37] text-2xl font-bold text-center mt-3 mb-2 inline-block border-b border-[#D4AF37]/20 pb-1.5">Période de vie & Datation</h3>
+            <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold text-center mt-3 mb-2 inline-block border-b pb-1.5 ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/20'}`}>Période de vie & Datation</h3>
          </div>
-         <p className="text-center font-sans italic text-slate-300 mb-8 mt-2 px-4">
+         <p className={`text-center font-sans italic mb-8 mt-2 px-4 font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>
            {fossil.fossilDating ? `Datation : ${fossil.fossilDating}` : "Sélectionnez une époque pour en savoir plus."}
          </p>
          
          <div className="w-full overflow-hidden relative flex flex-col">
           <div className="overflow-x-auto custom-scrollbar flex items-center px-8 pb-8">
-             <div className="flex shadow-2xl border border-[#D4AF37]/20 bg-[#060B1A]/95 relative min-w-max mx-auto rounded-3xl overflow-hidden animate-fade-in backdrop-blur-sm">
+             <div className={`flex shadow-2xl border relative min-w-max mx-auto rounded-3xl overflow-hidden animate-fade-in backdrop-blur-sm ${isLight ? 'bg-white border-slate-300' : 'bg-[#060B1A]/95 border-[#D4AF37]/20'}`}>
                  {geologicalEras.slice().reverse().map((era) => (
                     <div key={era.name} className={`flex flex-col border-r-2 border-[#000000] last:border-r-0`}>
-                       <div className={`h-12 flex items-center justify-center font-serif font-black text-base md:text-lg uppercase tracking-widest border-b-2 border-[#000000] px-6 ${era.color} ${era.textColor} drop-shadow-sm`}>
+                       <div className={`h-12 flex items-center justify-center font-serif font-black text-base md:text-lg uppercase tracking-widest border-b-2 border-[#000000] px-6 ${era.color} text-black drop-shadow-sm`}>
                           {era.name}
                        </div>
                        <div className="flex-1 flex">
@@ -668,29 +686,24 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                                <div 
                                  key={sub} 
                                  onClick={() => setShowPeriodInfo(showPeriodInfo === sub ? null : sub)}
-                                 className={`group/item relative min-w-[75px] md:min-w-[90px] p-3 flex flex-col items-center justify-between cursor-pointer border-r border-[#000000]/30 last:border-r-0 transition-all duration-300 ${
+                                 className={`group/item relative min-w-[75px] md:min-w-[90px] p-3 flex flex-col items-center justify-between cursor-pointer border-r border-black/30 last:border-r-0 transition-all duration-300 ${
                                    isSelected 
-                                     ? 'bg-gradient-to-b from-[#D4AF37]/20 via-[#D4AF37]/05 to-[#060B1A] border-t-2 border-b-2 border-[#D4AF37] scale-105 z-10 shadow-[inset_0_0_12px_rgba(212,175,55,0.1),0_4px_20px_rgba(212,175,55,0.08)]' 
-                                     : `${era.color} bg-opacity-5 hover:bg-opacity-20 ${era.textColor} hover:text-white transition-colors`
+                                     ? `${era.color} scale-105 z-20 shadow-xl border-x-2 border-black ring-2 ring-black/30`
+                                     : (isLight 
+                                         ? 'bg-slate-100/90 hover:bg-slate-200/90' 
+                                         : 'bg-[#0d1633] hover:bg-[#162248]')
                                  }`}
                                  style={{ height: '210px' }}
                                >
                                  {/* Horizontal connection line thread */}
-                                 <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-slate-800/40 z-0 pointer-events-none" />
+                                 <div className={`absolute top-1/2 left-0 right-0 h-[2px] z-0 pointer-events-none ${isSelected ? 'bg-black/40' : (isLight ? 'bg-slate-300' : 'bg-slate-700/60')}`} />
 
                                  {/* Node circle on the thread */}
                                  <div className={`w-3.5 h-3.5 rounded-full border-2 z-10 flex items-center justify-center transition-all duration-300 ${
                                    isSelected 
-                                     ? 'bg-[#D4AF37] border-[#FFD700] scale-125 shadow-[0_0_8px_rgba(212,175,55,0.8)]' 
-                                     : 'bg-[#101A36] border-slate-600 group-hover/item:border-[#D4AF37]/60 group-hover/item:scale-110'
+                                     ? 'bg-black border-2 border-white scale-125 shadow-md ring-2 ring-black/40' 
+                                     : (isLight ? 'bg-white border-slate-500 group-hover/item:border-black' : 'bg-[#060B1A] border-slate-400 group-hover/item:border-white group-hover/item:scale-110')
                                  }`} />
-
-                                 {/* Specimen banner */}
-                                 {isSelected && (
-                                   <span className="absolute top-2.5 px-1 py-0.5 bg-[#D4AF37] text-[#060B1A] text-[7px] font-black tracking-widest rounded uppercase scale-90 flex items-center gap-0.5 font-serif shadow-sm">
-                                     ⛏️ Spécimen
-                                   </span>
-                                 )}
 
                                  {/* Period name vertical text */}
                                  <div className="flex-1 flex items-center justify-center py-4 z-10">
@@ -698,8 +711,10 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                                      style={{ writingMode: 'vertical-rl' }} 
                                      className={`rotate-180 font-serif text-xs md:text-sm uppercase tracking-widest transition-all duration-300 leading-none ${
                                        isSelected 
-                                         ? 'text-[#D4AF37] font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' 
-                                         : 'text-slate-300 group-hover/item:text-white font-medium'
+                                         ? 'text-black font-black drop-shadow-sm' 
+                                         : (isLight 
+                                             ? 'text-slate-800 font-bold group-hover/item:text-black' 
+                                             : 'text-slate-200 font-bold group-hover/item:text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]')
                                      }`}
                                    >
                                      {sub}
@@ -708,14 +723,18 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
                                  {/* Millions of years annotation at the bottom of column */}
                                  <div className="z-10 mt-auto flex flex-col items-center">
-                                   <span className={`text-[8px] font-mono tracking-tight ${isSelected ? 'text-[#D4AF37] font-bold' : 'text-slate-500 group-hover/item:text-slate-400'}`}>
+                                   <span className={`text-[8px] font-mono tracking-tight font-bold ${
+                                     isSelected 
+                                       ? 'text-black font-black' 
+                                       : (isLight ? 'text-slate-700' : 'text-slate-400 group-hover/item:text-slate-200')
+                                   }`}>
                                      {details?.age.split(' ')[0]} Ma
                                    </span>
                                  </div>
 
                                  {/* Small indicator on active hover */}
                                  {!isSelected && (
-                                   <Info size={10} className="absolute bottom-2 opacity-0 group-hover/item:opacity-70 transition-all text-[#D4AF37]" />
+                                   <Info size={10} className={`absolute bottom-2 opacity-0 group-hover/item:opacity-70 transition-all ${isLight ? 'text-slate-700' : 'text-slate-300'}`} />
                                  )}
                                </div>
                             )
@@ -729,24 +748,24 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
          {/* Period Info Popover */}
          {showPeriodInfo && (
-            <div className="mx-4 md:mx-8 p-6 md:p-8 border-l-4 border-[#D4AF37] bg-[#101A36]/80 rounded-r-3xl shadow-2xl mt-6 animate-fade-in relative overflow-hidden">
+            <div className={`mx-4 md:mx-8 p-6 md:p-8 border-l-4 rounded-r-3xl shadow-2xl mt-6 animate-fade-in relative overflow-hidden ${isLight ? 'bg-white border-black text-black' : 'bg-[#101A36]/80 border-[#D4AF37] text-white'}`}>
               <button 
                 onClick={() => setShowPeriodInfo(null)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white text-xs font-serif uppercase tracking-wider hover:scale-105"
+                className={`absolute top-4 right-4 text-xs font-serif uppercase tracking-wider hover:scale-105 font-bold ${isLight ? 'text-black hover:text-slate-700' : 'text-slate-400 hover:text-white'}`}
               >
                 ✕ Fermer
               </button>
 
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4 relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 mb-4 relative z-10 border-slate-200">
                 <div>
-                  <span className="text-[10px] font-serif uppercase tracking-widest text-[#D4AF37] font-bold">Fiche Scientifique</span>
-                  <h4 className="font-serif text-2xl md:text-3xl font-black uppercase tracking-widest text-white mt-1">
+                  <span className={`text-[10px] font-serif uppercase tracking-widest font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Fiche Scientifique</span>
+                  <h4 className={`font-serif text-2xl md:text-3xl font-black uppercase tracking-widest mt-1 ${isLight ? 'text-black' : 'text-white'}`}>
                     {showPeriodInfo}
                   </h4>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${geologicalEras.find(e => e.subPeriods.includes(showPeriodInfo))?.color}`} />
-                  <span className="text-xs font-serif uppercase tracking-widest text-slate-300 font-bold">
+                  <span className={`text-xs font-serif uppercase tracking-widest font-bold ${isLight ? 'text-black' : 'text-slate-300'}`}>
                     Ère {geologicalEras.find(e => e.subPeriods.includes(showPeriodInfo))?.name}
                   </span>
                 </div>
@@ -754,42 +773,42 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
               {/* Age & Duration details */}
               {subPeriodsDetails[showPeriodInfo] && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#060B1A]/60 p-4 rounded-2xl border border-white/5 mb-6 relative z-10">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl border mb-6 relative z-10 ${isLight ? 'bg-slate-50 border-slate-200 text-black' : 'bg-[#060B1A]/60 border-white/5 text-white'}`}>
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-[#D4AF37]/10 text-[#D4AF37] rounded-lg">
+                    <div className={`p-2 rounded-lg ${isLight ? 'bg-slate-200 text-black' : 'bg-[#D4AF37]/10 text-[#D4AF37]'}`}>
                       <Calendar size={14} />
                     </div>
                     <div>
-                      <div className="text-[9px] font-serif uppercase tracking-wider text-slate-500 font-semibold">Âge géologique</div>
-                      <div className="text-xs text-slate-200 font-bold font-sans">{subPeriodsDetails[showPeriodInfo].age}</div>
+                      <div className={`text-[9px] font-serif uppercase tracking-wider font-bold ${isLight ? 'text-slate-600' : 'text-slate-500'}`}>Âge géologique</div>
+                      <div className={`text-xs font-bold font-sans ${isLight ? 'text-black' : 'text-slate-200'}`}>{subPeriodsDetails[showPeriodInfo].age}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-[#D4AF37]/10 text-[#D4AF37] rounded-lg">
+                    <div className={`p-2 rounded-lg ${isLight ? 'bg-slate-200 text-black' : 'bg-[#D4AF37]/10 text-[#D4AF37]'}`}>
                       <Clock size={14} />
                     </div>
                     <div>
-                      <div className="text-[9px] font-serif uppercase tracking-wider text-slate-500 font-semibold">Durée estimée</div>
-                      <div className="text-xs text-slate-200 font-bold font-sans">{subPeriodsDetails[showPeriodInfo].duration}</div>
+                      <div className={`text-[9px] font-serif uppercase tracking-wider font-bold ${isLight ? 'text-slate-600' : 'text-slate-500'}`}>Durée estimée</div>
+                      <div className={`text-xs font-bold font-sans ${isLight ? 'text-black' : 'text-slate-200'}`}>{subPeriodsDetails[showPeriodInfo].duration}</div>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Main description */}
-              <p className="font-sans text-sm text-slate-300 leading-relaxed relative z-10 mb-6">
+              <p className={`font-sans text-sm leading-relaxed relative z-10 mb-6 font-medium ${isLight ? 'text-black' : 'text-slate-300'}`}>
                 {subPeriodsDetails[showPeriodInfo]?.desc || geologicalEras.find(e => e.subPeriods.includes(showPeriodInfo))?.desc}
               </p>
 
               {/* Ecosystem & typical fauna */}
               {subPeriodsDetails[showPeriodInfo]?.typicalFauna && (
-                <div className="mb-6 relative z-10 border-t border-white/5 pt-4">
-                  <h5 className="text-[10px] font-serif uppercase tracking-widest text-[#D4AF37] font-bold mb-2 flex items-center gap-1.5">
+                <div className={`mb-6 relative z-10 border-t pt-4 ${isLight ? 'border-slate-200' : 'border-white/5'}`}>
+                  <h5 className={`text-[10px] font-serif uppercase tracking-widest font-bold mb-2 flex items-center gap-1.5 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
                     <Compass size={12} /> Écosystème & Biodiversité
                   </h5>
                   <div className="flex flex-wrap gap-1.5">
                     {subPeriodsDetails[showPeriodInfo].typicalFauna.map((fauna) => (
-                      <span key={fauna} className="text-xs font-sans text-slate-300 bg-[#060B1A]/50 px-2.5 py-1 rounded-lg border border-white/5">
+                      <span key={fauna} className={`text-xs font-sans px-2.5 py-1 rounded-lg border font-semibold ${isLight ? 'bg-slate-100 text-black border-slate-300' : 'text-slate-300 bg-[#060B1A]/50 border-white/5'}`}>
                         🦕 {fauna}
                       </span>
                     ))}
@@ -799,13 +818,13 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
               {/* Science Factoid plaque */}
               {subPeriodsDetails[showPeriodInfo]?.funFact && (
-                <div className="p-4 bg-[#060B1A]/85 rounded-2xl border border-[#D4AF37]/20 flex gap-3 relative z-10">
-                  <div className="p-2 bg-[#D4AF37]/10 text-[#D4AF37] rounded-xl self-start">
+                <div className={`p-4 rounded-2xl border flex gap-3 relative z-10 ${isLight ? 'bg-amber-50 border-amber-300 text-black' : 'bg-[#060B1A]/85 border-[#D4AF37]/20 text-white'}`}>
+                  <div className={`p-2 rounded-xl self-start ${isLight ? 'bg-amber-100 text-black' : 'bg-[#D4AF37]/10 text-[#D4AF37]'}`}>
                      <BookOpen size={14} />
                   </div>
                   <div>
-                    <h6 className="text-[10px] font-serif uppercase tracking-widest text-[#D4AF37] font-bold">Le saviez-vous ?</h6>
-                    <p className="text-xs text-slate-300 font-sans mt-1 leading-relaxed italic">
+                    <h6 className={`text-[10px] font-serif uppercase tracking-widest font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Le saviez-vous ?</h6>
+                    <p className={`text-xs font-sans mt-1 leading-relaxed italic font-medium ${isLight ? 'text-black' : 'text-slate-300'}`}>
                       "{subPeriodsDetails[showPeriodInfo].funFact}"
                     </p>
                   </div>
@@ -819,11 +838,11 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
         {/* Discovery & Setup */}
         {fossil.discoveryLocation && (
            <div className="space-y-8">
-               <div className="border-2 border-[#D4AF37]/30 p-8 text-center bg-[#101A36]/60 rounded-3xl shadow-xl animate-fade-in delay-100">
-                  <h3 className="font-serif uppercase tracking-widest text-[#D4AF37] text-2xl font-bold mb-6 border-b border-[#D4AF37]/30 pb-4 inline-block">Lieu et date de découverte</h3>
-                  <p className="font-sans text-slate-200 mb-4">{fossil.discoveryLocation}</p>
+               <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-100 ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+                  <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Lieu et date de découverte</h3>
+                  <p className={`font-sans mb-4 font-medium ${isLight ? 'text-black' : 'text-slate-200'}`}>{fossil.discoveryLocation}</p>
                   
-                  <div className="w-full h-48 bg-[#060B1A] border border-[#D4AF37]/20 rounded-2xl overflow-hidden relative z-0">
+                  <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
                      <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full" zoomControl={true} dragging={true} scrollWheelZoom={true}>
                        <ChangeView center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} />
                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -836,41 +855,41 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
         {/* Species */}
         {(fossil.animalOrigin || fossil.alimentation || fossil.speciesImages?.length || fossil.animalImage) ? (
-           <div className="border-2 border-[#D4AF37]/30 p-8 text-center bg-[#101A36]/60 rounded-3xl shadow-xl animate-fade-in delay-200">
-              <h3 className="font-serif uppercase tracking-widest text-[#D4AF37] text-2xl font-bold mb-6 border-b border-[#D4AF37]/30 pb-4 inline-block">
+           <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-200 ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+              <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
                 Espèce {fossil.speciesType === 'vegetal' ? 'Végétale' : 'Animale'}
               </h3>
               
               {fossil.animalOrigin && (
-                <p className="font-sans text-slate-200 mb-6 whitespace-pre-wrap leading-relaxed border-b border-[#D4AF37]/20 pb-6">{fossil.animalOrigin}</p>
+                <p className={`font-sans mb-6 whitespace-pre-wrap leading-relaxed border-b pb-6 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/20'}`}>{fossil.animalOrigin}</p>
               )}
               
               {fossil.speciesType !== 'vegetal' && (fossil.alimentation || fossil.speciesSize) && (
-                <div className="grid grid-cols-2 gap-4 mb-6 border-b border-[#D4AF37]/20 pb-6 text-left">
+                <div className={`grid grid-cols-2 gap-4 mb-6 border-b pb-6 text-left ${isLight ? 'border-slate-200' : 'border-[#D4AF37]/20'}`}>
                   {fossil.alimentation && (
                     <div>
-                      <h4 className="font-serif uppercase tracking-widest text-xs text-[#D4AF37] mb-2 font-bold">Alimentation</h4>
-                      <p className="font-sans text-slate-300 text-sm whitespace-pre-wrap">{fossil.alimentation}</p>
+                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Alimentation</h4>
+                      <p className={`font-sans text-sm whitespace-pre-wrap font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.alimentation}</p>
                     </div>
                   )}
                   {fossil.speciesSize && (
                     <div>
-                      <h4 className="font-serif uppercase tracking-widest text-xs text-[#D4AF37] mb-2 font-bold">Taille</h4>
-                      <p className="font-sans text-slate-300 text-sm">{fossil.speciesSize}</p>
+                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Taille</h4>
+                      <p className={`font-sans text-sm font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.speciesSize}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {(fossil.speciesImages && fossil.speciesImages.length > 0) || fossil.animalImage ? (
-                 <div className="flex gap-4 overflow-x-auto pb-4 snap-x border border-[#D4AF37]/20 p-2 bg-[#060B1A]/50 rounded-2xl">
+                 <div className={`flex gap-4 overflow-x-auto pb-4 snap-x border p-2 rounded-2xl ${isLight ? 'border-slate-200 bg-slate-50' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
                    {fossil.animalImage && (!fossil.speciesImages || fossil.speciesImages.length === 0) && (
-                      <div className="border border-[#D4AF37]/30 shadow-md bg-[#060B1A] shrink-0 w-64 snap-center mx-auto rounded-xl p-1 overflow-hidden">
+                      <div className={`border shadow-md shrink-0 w-64 snap-center mx-auto rounded-xl p-1 overflow-hidden ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
                          <img src={fossil.animalImage} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105" onClick={() => setEnlargedImage(fossil.animalImage)} />
                       </div>
                    )}
                    {fossil.speciesImages && fossil.speciesImages.map((img, i) => (
-                      <div key={i} className="border border-[#D4AF37]/30 shadow-md bg-[#060B1A] shrink-0 w-64 snap-center rounded-xl p-1 overflow-hidden">
+                      <div key={i} className={`border shadow-md shrink-0 w-64 snap-center rounded-xl p-1 overflow-hidden ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
                          <img src={img} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105" onClick={() => setEnlargedImage(img)} />
                       </div>
                    ))}
@@ -881,9 +900,9 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       </div>
 
      {(techSheet.dateAchat || techSheet.lieuAchat || techSheet.prix || techSheet.certificat || techSheet.typeSheet === 'prelevement') && (
-        <div className="border-2 border-[#D4AF37]/30 p-8 mt-8 bg-[#101A36]/60 rounded-3xl shadow-xl animate-fade-in delay-300 print:break-inside-avoid">
+        <div className={`border-2 p-8 mt-8 rounded-3xl shadow-xl animate-fade-in delay-300 print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
            <div className="text-center">
-             <h3 className="font-serif uppercase tracking-widest text-[#D4AF37] text-2xl font-bold mb-6 border-b border-[#D4AF37]/30 pb-4 inline-block">
+             <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
                {techSheet.typeSheet === 'prelevement' ? 'Fiche Technique : Prélèvement' : 'Fiche Technique : Achat'}
              </h3>
            </div>
@@ -891,14 +910,14 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
            {techSheet.typeSheet === 'prelevement' ? (
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                <div className="space-y-4 text-left">
-                  <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2">
-                    <span className="font-bold text-[#D4AF37] mr-2">Type :</span> Prélèvement (Découverte de terrain)
+                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+                    <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Type :</span> Prélèvement (Découverte de terrain)
                   </p>
-                  <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2">
-                    <span className="font-bold text-[#D4AF37] mr-2">Date de découverte :</span> {techSheet.datePrelevement || 'Non précisée'}
+                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+                    <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Date de découverte :</span> {techSheet.datePrelevement || 'Non précisée'}
                   </p>
-                  <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2">
-                    <span className="font-bold text-[#D4AF37] mr-2">Lieu précis :</span> {techSheet.lieuPrelevement || 'Non précisé'}
+                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+                    <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu précis :</span> {techSheet.lieuPrelevement || 'Non précisé'}
                   </p>
                </div>
              </div>
@@ -906,16 +925,16 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4 text-left">
                    {techSheet.dateAchat && (
-                     <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2"><span className="font-bold text-[#D4AF37] mr-2">Date d'achat:</span> {techSheet.dateAchat}</p>
+                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Date d'achat:</span> {techSheet.dateAchat}</p>
                    )}
                    {techSheet.lieuAchat && (
-                     <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2"><span className="font-bold text-[#D4AF37] mr-2">Lieu d'achat:</span> {techSheet.lieuAchat}</p>
+                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu d'achat:</span> {techSheet.lieuAchat}</p>
                    )}
                    {techSheet.prix ? (
-                     <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2"><span className="font-bold text-[#D4AF37] mr-2">Prix d'achat:</span> {techSheet.prix} €</p>
+                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Prix d'achat:</span> {techSheet.prix} €</p>
                    ) : null}
                    {techSheet.certificat && (
-                     <p className="font-sans text-slate-200 border-b border-[#D4AF37]/15 pb-2"><span className="font-bold text-[#D4AF37] mr-2">Certificat d'authenticité:</span> {techSheet.certificat === 'oui' ? 'Oui' : 'Non'}</p>
+                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Certificat d'authenticité:</span> {techSheet.certificat === 'oui' ? 'Oui' : 'Non'}</p>
                    )}
                 </div>
                 {techSheet.certificat === 'oui' && techSheet.certificatPhoto && (
@@ -923,7 +942,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                       <img 
                          src={techSheet.certificatPhoto} 
                          alt="Certificat" 
-                         className="max-w-xs max-h-48 object-contain cursor-pointer border border-[#D4AF37]/30 rounded-xl shadow-md transition-transform hover:scale-105" 
+                         className={`max-w-xs max-h-48 object-contain cursor-pointer border rounded-xl shadow-md transition-transform hover:scale-105 ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/30'}`} 
                          onClick={() => setEnlargedImage(techSheet.certificatPhoto!)}
                       />
                    </div>
@@ -937,30 +956,30 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#060B1A] bg-texture font-sans text-white">
-      <div className="p-4 bg-[#060B1A]/95 border-b border-[#D4AF37]/20 flex items-center justify-between sticky top-0 z-50 print:hidden backdrop-blur-md">
+    <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${isLight ? 'bg-[#F7F5F0] text-black' : 'bg-[#060B1A] bg-texture text-white'}`}>
+      <div className={`p-4 border-b flex items-center justify-between sticky top-0 z-50 print:hidden backdrop-blur-md transition-colors ${isLight ? 'bg-[#F7F5F0]/95 border-slate-200 text-black' : 'bg-[#060B1A]/95 border-[#D4AF37]/20 text-white'}`}>
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="p-2 text-slate-300 hover:text-[#D4AF37] hover:scale-110 active:scale-95 transition-all"><ChevronLeft size={24} /></button>
-          <button onClick={onHome} className="p-2 text-slate-300 hover:text-[#D4AF37] hover:scale-110 active:scale-95 transition-all"><Home size={24} /></button>
+          <button onClick={onBack} className={`p-2 hover:scale-110 active:scale-95 transition-all ${isLight ? 'text-black hover:text-[#D4AF37]' : 'text-slate-300 hover:text-[#D4AF37]'}`}><ChevronLeft size={24} /></button>
+          <button onClick={onHome} className={`p-2 hover:scale-110 active:scale-95 transition-all ${isLight ? 'text-black hover:text-[#D4AF37]' : 'text-slate-300 hover:text-[#D4AF37]'}`}><Home size={24} /></button>
         </div>
         <div className="flex items-center gap-4">
           {!isEditing ? (
-            <button onClick={() => setIsEditing(true)} className="p-2 border-2 border-[#D4AF37]/40 rounded-xl text-white hover:border-[#D4AF37] hover:bg-[#101A36] transition-all" title="Éditer">
+            <button onClick={() => setIsEditing(true)} className={`p-2 border rounded-xl transition-all ${isLight ? 'border-slate-300 text-black hover:bg-slate-100' : 'border-[#D4AF37]/40 text-white hover:border-[#D4AF37] hover:bg-[#101A36]'}`} title="Éditer">
               <Edit2 size={20} />
             </button>
           ) : (
-            <button onClick={() => setIsEditing(false)} className="p-2 border-2 border-[#D4AF37]/40 rounded-xl text-white hover:border-[#D4AF37] hover:bg-[#101A36] transition-all" title="Aperçu">
+            <button onClick={() => setIsEditing(false)} className={`p-2 border rounded-xl transition-all ${isLight ? 'border-slate-300 text-black hover:bg-slate-100' : 'border-[#D4AF37]/40 text-white hover:border-[#D4AF37] hover:bg-[#101A36]'}`} title="Aperçu">
               <Eye size={20} />
             </button>
           )}
 
           {existingFossil && onDelete && (
-            <button onClick={() => setShowDeleteConfirm(true)} className="p-2 border-2 border-red-500/40 rounded-xl text-red-400 hover:border-red-500 hover:bg-red-950/20 transition-all" title="Supprimer">
+            <button onClick={() => setShowDeleteConfirm(true)} className="p-2 border border-red-500/40 rounded-xl text-red-500 hover:border-red-500 hover:bg-red-950/20 transition-all" title="Supprimer">
               <Trash2 size={20} />
             </button>
           )}
 
-          <button onClick={handleSave} className="p-2 bg-[#D4AF37] text-[#060B1A] rounded-xl font-bold hover:bg-[#FFD700] hover:scale-105 active:scale-95 transition-all" title="Enregistrer">
+          <button onClick={handleSave} className={`p-2 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all ${isLight ? 'bg-black text-white hover:bg-slate-800' : 'bg-[#D4AF37] text-[#060B1A] hover:bg-[#FFD700]'}`} title="Enregistrer">
             <Save size={20} />
           </button>
         </div>
@@ -970,10 +989,10 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
         {isEditing ? renderEditMode() : renderViewMode()}
 
         <div className="max-w-4xl mx-auto flex justify-center gap-4 mt-12 print:hidden relative z-10 pb-8">
-          <button onClick={handlePrint} className="flex items-center gap-2 px-8 py-3 border-2 border-[#D4AF37]/35 text-white hover:bg-[#101A36] hover:border-[#D4AF37] hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest font-serif text-sm rounded-xl">
+          <button onClick={handlePrint} className={`flex items-center gap-2 px-8 py-3 border text-sm rounded-xl uppercase tracking-widest font-serif font-bold transition-all ${isLight ? 'border-slate-300 text-black hover:bg-slate-100' : 'border-[#D4AF37]/35 text-white hover:bg-[#101A36] hover:border-[#D4AF37]'}`}>
             <Printer size={16} /> Imprimer
           </button>
-          <button onClick={onBack} className="flex items-center gap-2 px-8 py-3 border-2 border-[#D4AF37]/35 text-white hover:bg-[#101A36] hover:border-[#D4AF37] hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest font-serif text-sm rounded-xl">
+          <button onClick={onBack} className={`flex items-center gap-2 px-8 py-3 border text-sm rounded-xl uppercase tracking-widest font-serif font-bold transition-all ${isLight ? 'border-slate-300 text-black hover:bg-slate-100' : 'border-[#D4AF37]/35 text-white hover:bg-[#101A36] hover:border-[#D4AF37]'}`}>
             <ArrowLeft size={16} /> Retour
           </button>
         </div>
@@ -981,11 +1000,11 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#101A36] border-2 border-red-500/30 p-8 max-w-sm w-full rounded-2xl shadow-2xl">
-            <h3 className="font-serif text-xl font-bold mb-4 text-red-400">Supprimer le fossile</h3>
-            <p className="font-sans text-slate-300 mb-8">Êtes-vous sûr de vouloir supprimer ce fossile ? Cette action est irréversible.</p>
+          <div className={`border-2 border-red-500/30 p-8 max-w-sm w-full rounded-2xl shadow-2xl ${isLight ? 'bg-white text-black' : 'bg-[#101A36] text-white'}`}>
+            <h3 className="font-serif text-xl font-bold mb-4 text-red-500">Supprimer le fossile</h3>
+            <p className={`font-sans mb-8 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Êtes-vous sûr de vouloir supprimer ce fossile ? Cette action est irréversible.</p>
             <div className="flex justify-end gap-4">
-              <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 border-2 border-slate-500/30 text-slate-300 hover:border-slate-400 rounded-xl transition-all font-sans uppercase tracking-wider text-xs font-bold">
+              <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 border border-slate-400 text-slate-700 hover:border-slate-600 rounded-xl transition-all font-sans uppercase tracking-wider text-xs font-bold">
                 Annuler
               </button>
               <button onClick={() => onDelete!(existingFossil!.id)} className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl transition-all font-sans uppercase tracking-wider text-xs font-bold">
@@ -996,7 +1015,6 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
         </div>
       )}
 
-      {/* Basic print styles */}
       {enlargedImage && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out flex-col" onClick={() => setEnlargedImage(null)}>
           <img src={enlargedImage} alt="Visuel" className="max-w-full max-h-full object-contain" />
@@ -1006,7 +1024,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       <style>{`
         @media print {
           @page { size: A4 portrait; margin: 1.5cm; }
-          body { -webkit-print-color-adjust: exact; background: white; }
+          body { -webkit-print-color-adjust: exact; background: white !important; color: black !important; }
           .print\\:hidden { display: none !important; }
           .print\\:page-break-inside-avoid { page-break-inside: avoid; }
         }

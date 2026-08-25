@@ -46,6 +46,7 @@ export interface Fossil {
 
 export interface TechnicalSheet {
   id: string;
+  fossilId?: string;
   nom: string;
   nomPhoto: string;
   provenance: string;

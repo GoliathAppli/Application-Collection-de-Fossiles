@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Home, Plus, Trash2, Edit2, Eye, Printer } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Edit2, Eye, Printer, Coins, Layers, Compass, Tag } from 'lucide-react';
 import { TechnicalSheet } from '../types';
 import { getSheets, saveSheets } from '../store';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,9 +7,10 @@ import ImageUpload from '../components/ImageUpload';
 
 interface TechnicalSheetsViewProps {
   onBack: () => void;
+  isLight?: boolean;
 }
 
-export default function TechnicalSheetsView({ onBack }: TechnicalSheetsViewProps) {
+export default function TechnicalSheetsView({ onBack, isLight = false }: TechnicalSheetsViewProps) {
   const [sheets, setSheets] = useState<TechnicalSheet[]>([]);
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -50,122 +51,298 @@ export default function TechnicalSheetsView({ onBack }: TechnicalSheetsViewProps
   };
 
   const totalValue = sheets.reduce((sum, s) => sum + (s.typeSheet === 'prelevement' ? 0 : (Number(s.prix) || 0)), 0);
+  const boughtCount = sheets.filter(s => (s.typeSheet || 'achat') === 'achat').length;
+  const prelevementCount = sheets.filter(s => s.typeSheet === 'prelevement').length;
+  const certifiedCount = sheets.filter(s => s.certificat === 'oui').length;
 
   const handlePrint = () => {
     setIsEditing(false);
     window.focus();
     setTimeout(() => {
       window.print();
-    }, 100);
+    }, 150);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#060B1A] bg-texture font-sans text-white">
-      <div className="p-4 bg-[#060B1A]/95 border-b border-[#D4AF37]/20 flex items-center justify-between sticky top-0 z-50 print:hidden backdrop-blur-md">
+    <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${isLight ? 'bg-[#F7F5F0] text-black' : 'bg-[#060B1A] bg-texture text-white'}`}>
+      
+      {/* Top Bar (Screen only) */}
+      <div className={`p-4 border-b flex items-center justify-between sticky top-0 z-50 print:hidden backdrop-blur-md transition-colors ${
+        isLight ? 'bg-[#F7F5F0]/95 border-slate-200 text-black' : 'bg-[#060B1A]/95 border-[#D4AF37]/20 text-white'
+      }`}>
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="flex items-center gap-2 p-2 text-slate-300 hover:text-[#D4AF37] hover:scale-110 active:scale-95 transition-all"><ChevronLeft size={24} /> <span className="hidden sm:inline font-serif tracking-widest text-sm uppercase">Retour</span></button>
+          <button 
+            onClick={onBack} 
+            className={`flex items-center gap-2 p-2 hover:scale-110 active:scale-95 transition-all ${
+              isLight ? 'text-black hover:text-[#D4AF37]' : 'text-slate-300 hover:text-[#D4AF37]'
+            }`}
+          >
+            <ChevronLeft size={24} /> 
+            <span className="hidden sm:inline font-serif tracking-widest text-sm uppercase font-bold text-black">Retour</span>
+          </button>
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold font-serif text-[#D4AF37] tracking-widest uppercase text-center flex-1 hidden sm:block animate-fade-in drop-shadow-sm">Fiches Techniques</h2>
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsEditing(!isEditing)} className={`px-4 py-2 border-2 border-[#D4AF37]/40 rounded-xl transition-all flex items-center gap-2 font-serif uppercase tracking-wider text-sm animate-fade-in ${isEditing ? 'bg-[#D4AF37] text-[#060B1A] font-bold' : 'bg-transparent text-white hover:bg-[#101A36] hover:border-[#D4AF37]'}`}>
-            {isEditing ? <><Eye size={18} /><span className="hidden sm:inline">Visualisation</span></> : <><Edit2 size={18} /><span className="hidden sm:inline">Édition</span></>}
+
+        <h2 className={`text-xl md:text-3xl font-bold font-serif tracking-widest uppercase text-center flex-1 hidden sm:block animate-fade-in drop-shadow-sm ${
+          isLight ? 'text-black' : 'text-[#D4AF37]'
+        }`}>
+          Fiches Techniques & Valeur
+        </h2>
+
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsEditing(!isEditing)} 
+            className={`px-3.5 py-2 border rounded-xl transition-all flex items-center gap-2 font-serif uppercase tracking-wider text-xs sm:text-sm shadow-sm ${
+              isEditing 
+                ? (isLight ? 'bg-black text-white font-bold border-black' : 'bg-[#D4AF37] text-[#060B1A] font-bold border-[#D4AF37]') 
+                : (isLight ? 'bg-white text-black border-slate-300 hover:bg-slate-100' : 'bg-transparent text-white border-[#D4AF37]/40 hover:bg-[#101A36] hover:border-[#D4AF37]')
+            }`}
+          >
+            {isEditing ? <><Eye size={16} /><span className="hidden sm:inline">Visualisation</span></> : <><Edit2 size={16} /><span className="hidden sm:inline">Édition</span></>}
           </button>
-          <button onClick={addRow} className="px-4 py-2 bg-[#D4AF37] text-[#060B1A] font-bold hover:bg-[#FFD700] rounded-xl transition-all flex items-center gap-2 font-serif uppercase tracking-wider text-sm animate-fade-in delay-100">
-            <Plus size={20} /> <span className="hidden sm:inline">Ajouter</span>
+
+          <button 
+            onClick={addRow} 
+            className={`px-3.5 py-2 font-bold rounded-xl transition-all flex items-center gap-1.5 font-serif uppercase tracking-wider text-xs sm:text-sm shadow-md active:scale-95 ${
+              isLight ? 'bg-black text-white hover:bg-slate-800' : 'bg-[#D4AF37] text-[#060B1A] hover:bg-[#FFD700]'
+            }`}
+          >
+            <Plus size={18} /> <span className="hidden sm:inline">Ajouter</span>
           </button>
-          <button onClick={handlePrint} className="p-2 border-2 border-[#D4AF37]/30 text-slate-300 hover:border-[#D4AF37] hover:text-[#D4AF37] rounded-xl transition-all">
-            <Printer size={20} />
+
+          <button 
+            onClick={handlePrint} 
+            title="Imprimer le registre complet"
+            className={`p-2.5 border rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm flex items-center gap-1.5 ${
+              isLight ? 'border-slate-300 text-black hover:bg-slate-100' : 'border-[#D4AF37]/40 text-slate-200 hover:border-[#D4AF37] hover:text-[#D4AF37] hover:bg-[#101A36]'
+            }`}
+          >
+            <Printer size={18} />
+            <span className="hidden md:inline text-xs font-serif uppercase tracking-wider font-bold">Imprimer</span>
           </button>
         </div>
       </div>
 
-      <div className="flex-1 p-4 md:p-8 overflow-x-auto print:overflow-visible print:p-0">
-        
-        <div className="min-w-[1000px] max-w-full 2xl:max-w-[1800px] print:min-w-0 print:w-full mx-auto bg-[#101A36]/40 border-2 border-[#D4AF37]/20 rounded-3xl overflow-hidden print:border-none print:shadow-none shadow-2xl">
-          <table className="w-full text-left border-collapse font-sans text-white">
+      {/* Main Container */}
+      <div className="flex-1 p-4 md:p-8 flex flex-col gap-6 max-w-[1900px] w-full mx-auto print:p-0 print:m-0 print:max-w-none print:w-full print:gap-2">
+
+        {/* PRINT HEADER: Appears only during print/PDF generation */}
+        <div className="hidden print:flex items-center justify-between border-b-2 border-black pb-3 mb-3 text-black">
+          <div>
+            <h1 className="text-xl font-serif font-black uppercase tracking-wider text-black">
+              Registre & Fiches Techniques de la Collection de Fossiles
+            </h1>
+            <p className="text-xs font-serif italic text-slate-700 mt-0.5">
+              Inventaire scientifique et évaluation financière
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] uppercase font-bold text-slate-600 tracking-wider">Valeur Totale Estimée</div>
+            <div className="text-2xl font-serif font-black text-black">{totalValue.toFixed(2)} €</div>
+            <div className="text-[10px] font-mono text-slate-600">
+              {sheets.length} spécimen{sheets.length > 1 ? 's' : ''} ({boughtCount} achats, {prelevementCount} prélèvements)
+            </div>
+          </div>
+        </div>
+
+        {/* FIXED TOTAL VALUE BANNER: Remains FIXED at screen width when table scrolls horizontally */}
+        <div className={`print:hidden p-4 sm:p-5 border-2 rounded-2xl shadow-xl transition-all flex flex-wrap items-center justify-between gap-4 sticky top-18 z-40 backdrop-blur-lg ${
+          isLight 
+            ? 'bg-white/95 border-slate-300 text-black shadow-slate-200/60' 
+            : 'bg-[#0d1633]/95 border-[#D4AF37]/40 text-white shadow-black/60 ring-1 ring-[#D4AF37]/20'
+        }`}>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className={`p-3 rounded-xl border flex items-center justify-center shrink-0 ${
+              isLight ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-[#D4AF37]/20 border-[#D4AF37]/40 text-[#D4AF37]'
+            }`}>
+              <Coins size={28} />
+            </div>
+            <div>
+              <span className={`block text-[11px] sm:text-xs font-serif uppercase tracking-widest font-black ${
+                isLight ? 'text-slate-600' : 'text-[#D4AF37]'
+              }`}>
+                Valeur Totale du Registre
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className={`text-2xl sm:text-4xl font-serif italic font-black tracking-tight ${
+                  isLight ? 'text-black' : 'text-white'
+                }`}>
+                  {totalValue.toFixed(2)} €
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick stats pills */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-serif">
+            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${
+              isLight ? 'bg-slate-100 border-slate-200 text-slate-800' : 'bg-[#101A36] border-slate-700 text-slate-200'
+            }`}>
+              <Layers size={14} className={isLight ? 'text-slate-600' : 'text-[#D4AF37]'} />
+              <span><strong>{sheets.length}</strong> spécimen{sheets.length > 1 ? 's' : ''}</span>
+            </div>
+
+            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${
+              isLight ? 'bg-slate-100 border-slate-200 text-slate-800' : 'bg-[#101A36] border-slate-700 text-slate-200'
+            }`}>
+              <Tag size={14} className={isLight ? 'text-emerald-700' : 'text-emerald-400'} />
+              <span><strong>{boughtCount}</strong> achat{boughtCount > 1 ? 's' : ''}</span>
+            </div>
+
+            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${
+              isLight ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-950/40 border-amber-500/30 text-amber-300'
+            }`}>
+              <Compass size={14} />
+              <span><strong>{prelevementCount}</strong> prélèvement{prelevementCount > 1 ? 's' : ''}</span>
+            </div>
+
+            {certifiedCount > 0 && (
+              <div className={`px-3 py-1.5 rounded-xl border hidden lg:flex items-center gap-1.5 ${
+                isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+              }`}>
+                <span><strong>{certifiedCount}</strong> certifié{certifiedCount > 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* HORIZONTALLY SCROLLABLE TABLE CONTAINER (Screen) & FULL-WIDTH EXPANDED (Print) */}
+        <div className={`w-full overflow-x-auto custom-scrollbar border rounded-2xl shadow-xl print:overflow-visible print:w-full print:border-none print:shadow-none ${
+          isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/40 border-[#D4AF37]/25 text-white'
+        }`}>
+          <table className={`w-full min-w-[950px] print:min-w-full text-left border-collapse font-sans text-sm print:text-[9.5pt] ${
+            isLight ? 'text-black' : 'text-white'
+          }`}>
             <thead>
-              <tr className="bg-[#101A36] border-b border-[#D4AF37]/30 font-serif uppercase tracking-widest text-[#D4AF37]">
-                <th className="p-4 w-64">Nom du fossile (photo)</th>
-                <th className="p-4">Provenance et lieu de découverte</th>
-                <th className="p-4">Datation exacte (Période)</th>
-                <th className="p-4">Type / Acquisition</th>
-                <th className="p-4 w-64">Certificat / Détails</th>
-                <th className="p-4 w-32">Prix (€)</th>
-                {isEditing && <th className="p-4 w-16"></th>}
+              <tr className={`border-b font-serif uppercase tracking-wider ${
+                isLight 
+                  ? 'bg-slate-100 border-slate-300 text-black font-black print:bg-slate-200' 
+                  : 'bg-[#101A36] border-[#D4AF37]/30 text-[#D4AF37]'
+              }`}>
+                <th className="p-3.5 w-60 print:w-[22%] print:p-2">Nom du fossile</th>
+                <th className="p-3.5 w-64 print:w-[22%] print:p-2">Provenance / Découverte</th>
+                <th className="p-3.5 w-48 print:w-[16%] print:p-2">Datation (Période)</th>
+                <th className="p-3.5 w-48 print:w-[15%] print:p-2">Acquisition / Type</th>
+                <th className="p-3.5 w-48 print:w-[13%] print:p-2">Certificat</th>
+                <th className="p-3.5 w-32 print:w-[12%] print:p-2 text-right">Prix (€)</th>
+                {isEditing && <th className="p-3.5 w-16 print:hidden"></th>}
               </tr>
             </thead>
+
             <tbody>
-              {sheets.map(sheet => (
-                <tr key={sheet.id} className="border-b border-[#D4AF37]/10 hover:bg-[#101A36]/40 transition-colors">
-                  <td className="p-4">
+              {sheets.map((sheet, index) => (
+                <tr 
+                  key={sheet.id} 
+                  className={`border-b transition-colors print:border-black/30 print-avoid-break ${
+                    isLight 
+                      ? (index % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100/70') + ' border-slate-200' 
+                      : (index % 2 === 0 ? 'bg-[#060B1A]/30 hover:bg-[#101A36]/60' : 'bg-[#0a1229]/40 hover:bg-[#101A36]/70') + ' border-[#D4AF37]/10'
+                  }`}
+                >
+                  {/* Photo & Nom */}
+                  <td className="p-3.5 align-top print:p-2">
                     {isEditing ? (
-                      <input 
-                        type="text" 
-                        value={sheet.nom} 
-                        onChange={e => update(sheet.id, 'nom', e.target.value)}
-                        placeholder="Nom"
-                        className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none mb-2 bg-[#060B1A] text-white"
-                      />
+                      <div>
+                        <input 
+                          type="text" 
+                          value={sheet.nom} 
+                          onChange={e => update(sheet.id, 'nom', e.target.value)}
+                          placeholder="Nom du fossile"
+                          className={`w-full p-2 border rounded-xl outline-none mb-2 font-serif font-bold ${
+                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                          }`}
+                        />
+                        <ImageUpload 
+                          value={sheet.nomPhoto} 
+                          onChange={val => update(sheet.id, 'nomPhoto', val)}
+                          className={`h-20 w-full rounded-xl object-contain ${isLight ? 'bg-slate-100' : 'bg-[#060B1A]'}`}
+                        />
+                      </div>
                     ) : (
-                      <p className="font-serif font-bold text-lg mb-2 text-[#D4AF37]">{sheet.nom}</p>
-                    )}
-                    {isEditing ? (
-                      <ImageUpload 
-                        value={sheet.nomPhoto} 
-                        onChange={val => update(sheet.id, 'nomPhoto', val)}
-                        className="h-20 w-full rounded-xl object-contain bg-[#060B1A]"
-                      />
-                    ) : (
-                      sheet.nomPhoto && (
-                        <div className="relative">
-                          <img src={sheet.nomPhoto} alt={sheet.nom} className="h-20 w-full object-contain cursor-pointer rounded-xl bg-[#060B1A]/40 p-1 border border-[#D4AF37]/15 hover:border-[#D4AF37]/40 transition-all" onClick={() => setEnlargedImage(sheet.nomPhoto)} />
-                        </div>
-                      )
+                      <div className="flex flex-col gap-1.5">
+                        <p className={`font-serif font-bold text-base leading-snug ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
+                          {sheet.nom || 'Sans nom'}
+                        </p>
+                        {sheet.nomPhoto && (
+                          <div className="relative inline-block w-fit">
+                            <img 
+                              src={sheet.nomPhoto} 
+                              alt={sheet.nom} 
+                              className={`h-16 w-24 object-contain cursor-pointer rounded-lg p-0.5 border transition-all print:h-14 print:w-auto print:border-black/30 ${
+                                isLight ? 'bg-slate-100 border-slate-200 hover:border-slate-400' : 'bg-[#060B1A]/60 border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
+                              }`} 
+                              onClick={() => setEnlargedImage(sheet.nomPhoto)} 
+                            />
+                          </div>
+                        )}
+                      </div>
                     )}
                   </td>
-                  <td className="p-4">
+
+                  {/* Provenance & Lieu */}
+                  <td className="p-3.5 align-top print:p-2">
                     {isEditing ? (
                       <textarea 
                         value={sheet.provenance} 
                         onChange={e => update(sheet.id, 'provenance', e.target.value)}
-                        className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none min-h-[4rem] bg-[#060B1A] text-white resize-none"
+                        placeholder="Provenance, pays, région, formation..."
+                        className={`w-full p-2 border rounded-xl outline-none min-h-[4.5rem] resize-none text-xs ${
+                          isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                        }`}
                       />
                     ) : (
-                      <p className="whitespace-pre-wrap text-slate-300">{sheet.provenance}</p>
+                      <p className={`whitespace-pre-wrap leading-relaxed text-xs sm:text-sm ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                        {sheet.provenance || 'Non renseignée'}
+                      </p>
                     )}
                   </td>
-                  <td className="p-4">
+
+                  {/* Datation & Période */}
+                  <td className="p-3.5 align-top print:p-2">
                     {isEditing ? (
                       <div className="flex flex-col gap-2">
                         <input 
                           type="text" 
                           value={sheet.fossilDating || ''} 
                           onChange={e => update(sheet.id, 'fossilDating', e.target.value)}
-                          placeholder="Datation exacte"
-                          className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none bg-[#060B1A] text-white"
+                          placeholder="Datation (ex: -400 Ma)"
+                          className={`w-full p-2 border rounded-xl outline-none text-xs ${
+                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                          }`}
                         />
                         <input 
                           type="text" 
                           value={sheet.periode} 
                           onChange={e => update(sheet.id, 'periode', e.target.value)}
-                          placeholder="Période"
-                          className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none bg-[#060B1A] text-white text-xs"
+                          placeholder="Période (ex: Dévonien)"
+                          className={`w-full p-2 border rounded-xl outline-none text-xs font-semibold ${
+                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                          }`}
                         />
                       </div>
                     ) : (
                       <div>
-                        <p className="font-serif font-bold text-[#D4AF37] text-lg leading-tight">{sheet.fossilDating || 'Non spécifiée'}</p>
-                        <p className="text-xs text-slate-400 mt-1">({sheet.periode})</p>
+                        <p className={`font-serif font-bold text-sm leading-tight ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
+                          {sheet.fossilDating || 'Non spécifiée'}
+                        </p>
+                        {sheet.periode && (
+                          <p className={`text-xs mt-1 font-serif uppercase tracking-wider font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {sheet.periode}
+                          </p>
+                        )}
                       </div>
                     )}
                   </td>
-                  <td className="p-4">
+
+                  {/* Type / Acquisition */}
+                  <td className="p-3.5 align-top print:p-2">
                     {isEditing ? (
                       <div className="flex flex-col gap-2">
                         <select 
                           value={sheet.typeSheet || 'achat'} 
                           onChange={e => update(sheet.id, 'typeSheet', e.target.value)}
-                          className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none bg-[#060B1A] text-white text-xs font-semibold"
+                          className={`w-full p-2 border rounded-xl outline-none text-xs font-semibold ${
+                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                          }`}
                         >
                           <option value="achat">💰 Achat</option>
                           <option value="prelevement">⛏️ Prélèvement</option>
@@ -177,13 +354,17 @@ export default function TechnicalSheetsView({ onBack }: TechnicalSheetsViewProps
                               value={sheet.datePrelevement || ''} 
                               onChange={e => update(sheet.id, 'datePrelevement', e.target.value)}
                               placeholder="Date de découverte"
-                              className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none min-h-[3rem] bg-[#060B1A] text-white resize-none text-xs"
+                              className={`w-full p-2 border rounded-xl outline-none min-h-[2.5rem] resize-none text-xs ${
+                                isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                              }`}
                             />
                             <textarea 
                               value={sheet.lieuPrelevement || ''} 
                               onChange={e => update(sheet.id, 'lieuPrelevement', e.target.value)}
                               placeholder="Lieu précis"
-                              className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none min-h-[3rem] bg-[#060B1A] text-white resize-none text-xs"
+                              className={`w-full p-2 border rounded-xl outline-none min-h-[2.5rem] resize-none text-xs ${
+                                isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                              }`}
                             />
                           </div>
                         ) : (
@@ -192,42 +373,54 @@ export default function TechnicalSheetsView({ onBack }: TechnicalSheetsViewProps
                               value={sheet.dateAchat || ''} 
                               onChange={e => update(sheet.id, 'dateAchat', e.target.value)}
                               placeholder="Date d'achat"
-                              className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none min-h-[3rem] bg-[#060B1A] text-white resize-none text-xs"
+                              className={`w-full p-2 border rounded-xl outline-none min-h-[2.5rem] resize-none text-xs ${
+                                isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                              }`}
                             />
                             <textarea 
                               value={sheet.lieuAchat || ''} 
                               onChange={e => update(sheet.id, 'lieuAchat', e.target.value)}
                               placeholder="Lieu d'achat"
-                              className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none min-h-[3rem] bg-[#060B1A] text-white resize-none text-xs"
+                              className={`w-full p-2 border rounded-xl outline-none min-h-[2.5rem] resize-none text-xs ${
+                                isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                              }`}
                             />
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="text-slate-300">
+                      <div className="text-xs leading-relaxed">
                         {(sheet.typeSheet || 'achat') === 'prelevement' ? (
                           <div>
-                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/35 uppercase tracking-widest mb-2">⛏️ Prélèvement</span>
-                            {sheet.datePrelevement && <p className="whitespace-pre-wrap text-sm"><span className="font-bold text-[#D4AF37]/80">Date :</span> {sheet.datePrelevement}</p>}
-                            {sheet.lieuPrelevement && <p className="whitespace-pre-wrap text-sm"><span className="font-bold text-[#D4AF37]/80">Lieu :</span> {sheet.lieuPrelevement}</p>}
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5 border ${
+                              isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/35'
+                            }`}>⛏️ Prélèvement</span>
+                            {sheet.datePrelevement && <p><span className="font-bold opacity-80">Date :</span> {sheet.datePrelevement}</p>}
+                            {sheet.lieuPrelevement && <p><span className="font-bold opacity-80">Lieu :</span> {sheet.lieuPrelevement}</p>}
+                            {!sheet.datePrelevement && !sheet.lieuPrelevement && <p className="italic opacity-60">Terrain</p>}
                           </div>
                         ) : (
                           <div>
-                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/35 uppercase tracking-widest mb-2">💰 Achat</span>
-                            {sheet.dateAchat && <p className="whitespace-pre-wrap text-sm"><span className="font-bold text-[#D4AF37]/80">Date :</span> {sheet.dateAchat}</p>}
-                            {sheet.lieuAchat && <p className="whitespace-pre-wrap text-sm"><span className="font-bold text-[#D4AF37]/80">Lieu :</span> {sheet.lieuAchat}</p>}
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5 border ${
+                              isLight ? 'bg-slate-100 text-slate-900 border-slate-300' : 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/35'
+                            }`}>💰 Achat</span>
+                            {sheet.dateAchat && <p><span className="font-bold opacity-80">Date :</span> {sheet.dateAchat}</p>}
+                            {sheet.lieuAchat && <p><span className="font-bold opacity-80">Lieu :</span> {sheet.lieuAchat}</p>}
+                            {!sheet.dateAchat && !sheet.lieuAchat && <p className="italic opacity-60">Acquis</p>}
                           </div>
                         )}
                       </div>
                     )}
                   </td>
-                  <td className="p-4">
+
+                  {/* Certificat */}
+                  <td className="p-3.5 align-top print:p-2">
                     {isEditing ? (
                       (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <p className="text-xs text-slate-400 italic">Non applicable</p>
+                        <p className={`text-xs italic ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>N/A (Prélèvement)</p>
                       ) : (
-                        <>
-                          <div className="flex gap-4 mb-2">
+                        <div>
+                          <div className="flex gap-3 mb-2 text-xs font-semibold">
                             <label className="flex items-center gap-1 cursor-pointer">
                               <input type="radio" checked={sheet.certificat === 'oui'} onChange={() => update(sheet.id, 'certificat', 'oui')} className="accent-[#D4AF37]" /> Oui
                             </label>
@@ -236,78 +429,130 @@ export default function TechnicalSheetsView({ onBack }: TechnicalSheetsViewProps
                             </label>
                           </div>
                           {sheet.certificat === 'oui' && (
-                            <div className="relative border border-[#D4AF37]/30 p-1 bg-[#060B1A] rounded-xl">
-                              <ImageUpload 
-                                value={sheet.certificatPhoto} 
-                                onChange={val => update(sheet.id, 'certificatPhoto', val)}
-                                className="h-20 w-full cursor-pointer object-contain"
-                              />
-                              {sheet.certificatPhoto && (
-                                <button onClick={() => setEnlargedImage(sheet.certificatPhoto)} className="absolute inset-0 w-full h-full text-transparent hover:bg-black/20 focus:outline-none transition-colors">Agrandir</button>
-                              )}
-                            </div>
+                            <ImageUpload 
+                              value={sheet.certificatPhoto} 
+                              onChange={val => update(sheet.id, 'certificatPhoto', val)}
+                              className={`h-16 w-full rounded-lg object-contain ${isLight ? 'bg-slate-50' : 'bg-[#060B1A]'}`}
+                            />
                           )}
-                        </>
+                        </div>
                       )
                     ) : (
                       (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <p className="text-xs text-slate-500 italic">Non applicable</p>
+                        <p className="text-xs italic opacity-60">N/A</p>
                       ) : (
-                        <>
-                          <p className={`uppercase tracking-widest font-bold text-xs mb-2 ${sheet.certificat === 'oui' ? 'text-emerald-400' : 'text-slate-400'}`}>{sheet.certificat === 'oui' ? 'Certifié Oui' : sheet.certificat === 'non' ? 'Pas de certificat' : ''}</p>
+                        <div>
+                          <p className={`uppercase tracking-wider font-bold text-[11px] mb-1 ${
+                            sheet.certificat === 'oui' 
+                              ? (isLight ? 'text-emerald-700' : 'text-emerald-400') 
+                              : 'opacity-60'
+                          }`}>
+                            {sheet.certificat === 'oui' ? '✓ Certifié' : sheet.certificat === 'non' ? 'Sans certificat' : '-'}
+                          </p>
                           {sheet.certificat === 'oui' && sheet.certificatPhoto && (
-                            <img src={sheet.certificatPhoto} alt="Certificat" className="h-20 w-auto object-contain cursor-pointer rounded-xl border border-[#D4AF37]/15 p-1 bg-[#060B1A]/40 hover:border-[#D4AF37]/40 transition-all" onClick={() => setEnlargedImage(sheet.certificatPhoto)} />
+                            <img 
+                              src={sheet.certificatPhoto} 
+                              alt="Certificat" 
+                              className={`h-12 w-auto object-contain cursor-pointer rounded border p-0.5 transition-all print:h-10 print:border-black/30 ${
+                                isLight ? 'bg-slate-100 border-slate-200 hover:border-slate-400' : 'border-[#D4AF37]/20 bg-[#060B1A]/50 hover:border-[#D4AF37]/50'
+                              }`} 
+                              onClick={() => setEnlargedImage(sheet.certificatPhoto)} 
+                            />
                           )}
-                        </>
+                        </div>
                       )
                     )}
                   </td>
-                  <td className="p-4">
+
+                  {/* Prix (€) */}
+                  <td className="p-3.5 align-top text-right print:p-2">
                     {isEditing ? (
                       (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <p className="text-xs text-slate-400 italic">-</p>
+                        <p className="text-xs italic opacity-60 text-right">-</p>
                       ) : (
                         <input 
                           type="number" 
-                          value={sheet.prix || ''} 
+                          value={sheet.prix === 0 ? '' : sheet.prix || ''} 
                           onChange={e => update(sheet.id, 'prix', Number(e.target.value))}
-                          className="w-full p-2 border border-[#D4AF37]/20 rounded-xl focus:border-[#D4AF37] outline-none bg-[#060B1A] text-white"
+                          placeholder="0 €"
+                          className={`w-24 p-2 border rounded-xl outline-none text-right font-serif font-bold text-xs ${
+                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                          }`}
                         />
                       )
                     ) : (
                       (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <p className="text-slate-500 italic font-bold">-</p>
+                        <span className="text-xs italic opacity-50 font-serif">-</span>
                       ) : (
-                        <p className="font-serif italic font-bold text-[#D4AF37]">{sheet.prix ? `${sheet.prix} €` : '-'}</p>
+                        <span className={`font-serif italic font-bold text-sm sm:text-base ${
+                          isLight ? 'text-black' : 'text-[#D4AF37]'
+                        }`}>
+                          {sheet.prix ? `${Number(sheet.prix).toFixed(2)} €` : '-'}
+                        </span>
                       )
                     )}
                   </td>
+
+                  {/* Edit remove button */}
                   {isEditing && (
-                    <td className="p-4 text-center">
-                      <button onClick={() => removeRow(sheet.id)} className="p-2 text-slate-400 hover:text-red-400 transition-colors hover:scale-110"><Trash2 size={20} /></button>
+                    <td className="p-3.5 align-top text-center print:hidden">
+                      <button 
+                        onClick={() => removeRow(sheet.id)} 
+                        title="Supprimer la ligne"
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </td>
                   )}
                 </tr>
               ))}
+
               {sheets.length === 0 && (
                 <tr>
-                  <td colSpan={isEditing ? 7 : 6} className="p-12 text-center text-slate-400 font-serif italic text-lg border-b border-[#D4AF37]/10 bg-[#101A36]/10">Aucune fiche technique. Cliquez sur Ajouter.</td>
+                  <td 
+                    colSpan={isEditing ? 7 : 6} 
+                    className={`p-12 text-center font-serif italic text-base border-b ${
+                      isLight ? 'text-slate-500 border-slate-200 bg-slate-50' : 'text-slate-400 border-[#D4AF37]/10 bg-[#101A36]/10'
+                    }`}
+                  >
+                    Aucune fiche technique enregistrée pour le moment. Cliquez sur Ajouter pour commencer.
+                  </td>
                 </tr>
               )}
             </tbody>
+
+            {/* Table Footer with Total summary row */}
+            <tfoot>
+              <tr className={`border-t-2 font-serif ${
+                isLight 
+                  ? 'bg-slate-100 border-slate-400 text-black' 
+                  : 'bg-[#0c142e] border-[#D4AF37]/50 text-white'
+              }`}>
+                <td colSpan={5} className="p-4 font-bold uppercase tracking-wider text-xs sm:text-sm print:p-2">
+                  Total de la collection ({sheets.length} spécimen{sheets.length > 1 ? 's' : ''})
+                </td>
+                <td className={`p-4 text-right font-serif font-black text-base sm:text-lg print:p-2 ${
+                  isLight ? 'text-black' : 'text-[#D4AF37]'
+                }`}>
+                  {totalValue.toFixed(2)} €
+                </td>
+                {isEditing && <td className="print:hidden"></td>}
+              </tr>
+            </tfoot>
           </table>
         </div>
 
-        <div className="mt-8 bg-[#101A36]/60 p-6 border-2 border-[#D4AF37]/30 rounded-3xl inline-block shadow-lg">
-          <h3 className="text-xl font-serif text-[#D4AF37] uppercase tracking-widest">Valeur totale du registre</h3>
-          <p className="text-4xl font-serif italic text-white font-bold mt-2">{totalValue.toFixed(2)} €</p>
-        </div>
       </div>
 
+      {/* Image zoom modal */}
       {enlargedImage && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out flex-col print:hidden" onClick={() => setEnlargedImage(null)}>
-          <img src={enlargedImage} alt="Visuel" className="max-w-full max-h-full object-contain" />
-          <p className="text-white mt-4 font-sans text-sm tracking-widest">Cliquez n'importe où pour fermer</p>
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out flex-col print:hidden" 
+          onClick={() => setEnlargedImage(null)}
+        >
+          <img src={enlargedImage} alt="Aperçu grand format" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
+          <p className="text-white mt-4 font-serif uppercase tracking-widest text-xs opacity-75">Cliquez n'importe où pour fermer</p>
         </div>
       )}
     </div>

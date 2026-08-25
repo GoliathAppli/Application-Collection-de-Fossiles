@@ -13,9 +13,85 @@ body {
   color: #FFFFFF;
 }
 
+html.light, html.light body {
+  background-color: #F7F5F0;
+  color: #000000;
+}
+
+html.dark, html.dark body {
+  background-color: #060B1A;
+  color: #FFFFFF;
+}
+
+/* Custom scrollbars for timeline and tables */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+html.light .custom-scrollbar::-webkit-scrollbar-track {
+  background: #E2E8F0;
+  border-radius: 9999px;
+}
+
+html.light .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 9999px;
+}
+
+html.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #060B1A;
+  border-radius: 9999px;
+}
+
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #D4AF37;
+  border-radius: 9999px;
+}
+
 @layer utilities {
   .bg-texture {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm 8mm 8mm 8mm;
+  }
+
+  html, body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    background-image: none !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .print-avoid-break, tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
   }
 }
 

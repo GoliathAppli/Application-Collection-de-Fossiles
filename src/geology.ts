@@ -3,7 +3,7 @@ export const geologicalEras = [
     name: 'Precambrien', 
     desc: '4600 - 541 Ma. Apparition de la vie simple, bactéries.', 
     color: 'bg-[#f472b6]', 
-    textColor: 'text-[#831843]',
+    textColor: 'text-black',
     hoverColor: 'hover:bg-[#ec4899]',
     subPeriods: ['Précambrien'] 
   },
@@ -11,7 +11,7 @@ export const geologicalEras = [
     name: 'Paléozoïque', 
     desc: '541 - 252 Ma. Explosion cambrienne, trilobites, premiers vertébrés.', 
     color: 'bg-[#34d399]', 
-    textColor: 'text-[#064e3b]',
+    textColor: 'text-black',
     hoverColor: 'hover:bg-[#10b981]',
     subPeriods: ['Cambrien', 'Ordovicien', 'Silurien', 'Dévonien', 'Carbonifère', 'Permien']
   },
@@ -19,7 +19,7 @@ export const geologicalEras = [
     name: 'Mésozoïque', 
     desc: '252 - 66 Ma. Ère des dinosaures, ammonites, premiers mammifères.', 
     color: 'bg-[#60a5fa]', 
-    textColor: 'text-[#1e3a8a]',
+    textColor: 'text-black',
     hoverColor: 'hover:bg-[#3b82f6]',
     subPeriods: ['Trias', 'Jurassique', 'Crétacé']
   },
@@ -27,7 +27,7 @@ export const geologicalEras = [
     name: 'Cénozoïque', 
     desc: '66 Ma - Aujourd\'hui. Ère des mammifères, mammouths, hominidés.', 
     color: 'bg-[#fbbf24]', 
-    textColor: 'text-[#78350f]',
+    textColor: 'text-black',
     hoverColor: 'hover:bg-[#f59e0b]',
     subPeriods: ['Paléogène', 'Néogène', 'Quaternaire']
   }

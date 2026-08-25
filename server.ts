@@ -12,13 +12,22 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  app.post("/api/download-app", (req, res) => {
+  app.post("/api/download-app", async (req, res) => {
     try {
       const { data, banner } = req.body;
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
       if (!fs.existsSync(distPath)) {
-        return res.status(404).send("L'application n'a pas encore été compilée. Veuillez relancer le serveur de développement.");
+        await new Promise<void>((resolve, reject) => {
+          exec('npx vite build', (err) => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      
+      if (!fs.existsSync(distPath)) {
+        return res.status(500).send("Erreur: Le fichier autonome n'a pas pu être compilé.");
       }
       
       let html = fs.readFileSync(distPath, 'utf8');
@@ -30,8 +39,11 @@ async function startServer() {
       let bannerContent = banner;
       if (!bannerContent || bannerContent === '/banner.png') {
          try {
-           const bannerBuffer = fs.readFileSync(path.join(process.cwd(), 'public', 'banner.png'));
-           bannerContent = 'data:image/png;base64,' + bannerBuffer.toString('base64');
+           const bannerPath = path.join(process.cwd(), 'public', 'banner.png');
+           if (fs.existsSync(bannerPath)) {
+             const bannerBuffer = fs.readFileSync(bannerPath);
+             bannerContent = 'data:image/png;base64,' + bannerBuffer.toString('base64');
+           }
          } catch(e) {
            console.error("banner read error", e);
          }
@@ -41,12 +53,12 @@ async function startServer() {
          html = html.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
       }
       
-      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="Mon_Exposition_Fossiles.html"');
       res.send(html);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      res.status(500).send("Erreur serveur lors de la génération de l'application autonome.");
+      res.status(500).send("Erreur serveur lors de la génération de l'application autonome: " + (e?.message || e));
     }
   });
 
