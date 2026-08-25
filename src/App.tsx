@@ -5,6 +5,7 @@ import { getFossils, saveFossils, exportData, importData, getHomeImage, saveHome
 import { playDinoSound, isMuted, setMuted } from './utils/audio';
 import { Shell, Dna, ChevronLeft, ChevronRight, Plus, Download, Upload, LayoutGrid, GalleryHorizontal, Settings, Volume2, VolumeX, Moon, Sun, Globe, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
 import { TrilobiteIcon, MammothIcon, AmmoniteIcon } from './components/Icons';
+import goliathBadgeImg from './assets/images/goliath_applis_badge.jpg';
 import ImageUpload from './components/ImageUpload';
 import FossilFormView from './views/FossilFormView';
 import TimescaleView from './views/TimescaleView';
@@ -710,7 +711,7 @@ export default function App() {
                       : 'bg-[#060B1A] ring-4 ring-[#D4AF37]/30 group-hover:ring-[#D4AF37]/70 shadow-[#D4AF37]/20'
                   }`}>
                     <img 
-                      src="/goliath_applis_badge.jpg" 
+                      src={goliathBadgeImg} 
                       alt="Goliath Applis - Visitez notre page Facebook" 
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-contain rounded-full filter drop-shadow-md group-hover:brightness-105 transition-all duration-300"
