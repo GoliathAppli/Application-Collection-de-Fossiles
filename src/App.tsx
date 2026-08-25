@@ -27,7 +27,22 @@ export default function App() {
 
   // Theme & sound state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('app_theme') as 'light' | 'dark') || 'dark';
+    const saved = (localStorage.getItem('app_theme') as 'light' | 'dark') || 'dark';
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (saved === 'light') {
+        root.classList.add('light');
+        root.classList.remove('dark');
+        document.body.classList.add('light');
+        document.body.classList.remove('dark');
+      } else {
+        root.classList.add('dark');
+        root.classList.remove('light');
+        document.body.classList.add('dark');
+        document.body.classList.remove('light');
+      }
+    }
+    return saved;
   });
   const [muted, setMutedState] = useState<boolean>(isMuted());
 
@@ -35,15 +50,37 @@ export default function App() {
   const [isDownloadingApp, setIsDownloadingApp] = useState(false);
   const [downloadSuccessMessage, setDownloadSuccessMessage] = useState<string | null>(null);
 
+  const handleToggleTheme = (nextTheme?: 'light' | 'dark') => {
+    const targetTheme = nextTheme || (theme === 'light' ? 'dark' : 'light');
+    setTheme(targetTheme);
+    localStorage.setItem('app_theme', targetTheme);
+    const root = document.documentElement;
+    if (targetTheme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+      document.body.classList.add('light');
+      document.body.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      document.body.classList.add('dark');
+      document.body.classList.remove('light');
+    }
+  };
+
   // Apply theme to document body
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'light') {
       root.classList.add('light');
       root.classList.remove('dark');
+      document.body.classList.add('light');
+      document.body.classList.remove('dark');
     } else {
       root.classList.add('dark');
       root.classList.remove('light');
+      document.body.classList.add('dark');
+      document.body.classList.remove('light');
     }
     localStorage.setItem('app_theme', theme);
   }, [theme]);
@@ -458,11 +495,11 @@ export default function App() {
             </h3>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm">Mode d'affichage</p>
+                <p className={`font-bold text-sm ${isLight ? 'text-black' : 'text-white'}`}>Mode d'affichage</p>
                 <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Basculez entre le mode clair et le mode sombre.</p>
               </div>
               <button
-                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                onClick={() => handleToggleTheme()}
                 className={`px-4 py-2 rounded-xl border font-serif uppercase tracking-wider text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${isLight ? 'bg-black text-white border-transparent hover:bg-slate-800' : 'bg-[#F7F5F0] text-black border-transparent hover:bg-white'}`}
               >
                 {theme === 'light' ? (
@@ -485,7 +522,7 @@ export default function App() {
             </h3>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm">Couper le son</p>
+                <p className={`font-bold text-sm ${isLight ? 'text-black' : 'text-white'}`}>Couper le son</p>
                 <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Activez ou désactivez les effets sonores lors de la navigation.</p>
               </div>
               <button

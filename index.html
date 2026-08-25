@@ -7,6 +7,16 @@
     <script>
       window.__INITIAL_DATA__ = null;
       window.__INITIAL_BANNER__ = null;
+      try {
+        var savedTheme = localStorage.getItem('app_theme') || 'dark';
+        if (savedTheme === 'light') {
+          document.documentElement.classList.add('light');
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        }
+      } catch (e) {}
     </script>
   </head>
   <body>
