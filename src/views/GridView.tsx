@@ -16,9 +16,9 @@ export default function GridView({ fossils, onBack, onFossilClick, isLight = fal
     <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${isLight ? 'bg-[#F7F5F0] text-black' : 'bg-[#060B1A] bg-texture text-white'}`}>
       <div className={`p-4 border-b flex items-center justify-between sticky top-0 z-50 backdrop-blur-md transition-colors ${isLight ? 'bg-[#F7F5F0]/95 border-slate-200 text-black' : 'bg-[#060B1A]/95 border-[#D4AF37]/20 text-white'}`}>
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className={`flex items-center gap-2 p-2 hover:scale-110 active:scale-95 transition-all ${isLight ? 'text-black hover:text-[#D4AF37]' : 'text-slate-300 hover:text-[#D4AF37]'}`}>
+          <button onClick={onBack} className={`flex items-center gap-2 p-2 hover:scale-110 active:scale-95 transition-all ${isLight ? 'text-black hover:text-slate-700' : 'text-slate-300 hover:text-[#D4AF37]'}`}>
             <ChevronLeft size={24} /> 
-            <span className="hidden sm:inline font-serif tracking-widest text-sm uppercase font-bold text-black">Retour</span>
+            <span className={`hidden sm:inline font-serif tracking-widest text-sm uppercase font-bold ${isLight ? 'text-black' : 'text-slate-200'}`}>Retour</span>
           </button>
         </div>
         <h2 className={`text-2xl md:text-3xl font-serif font-bold tracking-widest uppercase flex-1 text-center hidden sm:block animate-fade-in drop-shadow-sm ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>

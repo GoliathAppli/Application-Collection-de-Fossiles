@@ -456,8 +456,15 @@ export default function App() {
     return (
       <div className={`flex flex-col min-h-screen bg-texture font-sans transition-colors duration-300 ${isLight ? 'bg-[#F7F5F0] text-black' : 'bg-[#060B1A] text-white'}`}>
         
-        {/* Top bar with discrete settings button */}
-        <div className="w-full max-w-4xl mx-auto px-4 pt-4 md:px-8 flex justify-end items-center">
+        {/* Top bar with theme toggle and settings buttons */}
+        <div className="w-full max-w-4xl mx-auto px-4 pt-4 md:px-8 flex justify-end items-center gap-3">
+          <button
+            onClick={() => handleToggleTheme()}
+            className={`p-2.5 rounded-xl border transition-all hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center shadow-md ${isLight ? 'bg-white border-slate-200 text-black hover:bg-slate-100 hover:border-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-slate-300 hover:text-[#D4AF37] hover:border-[#D4AF37]/60'}`}
+            title={theme === 'light' ? "Passer en mode sombre" : "Passer en mode clair"}
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
           <button 
             onClick={() => navigate('settings')} 
             className={`p-2.5 rounded-xl border transition-all hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center shadow-md ${isLight ? 'bg-white border-slate-200 text-black hover:bg-slate-100 hover:border-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-slate-300 hover:text-[#D4AF37] hover:border-[#D4AF37]/60'}`}
