@@ -549,33 +549,6 @@ export default function App() {
         </div>
 
         <div className="flex-1 w-full max-w-3xl mx-auto p-4 md:p-8 flex flex-col gap-6 relative z-10 pb-20">
-          
-          {/* Section: Affichage & Thème */}
-          <div className={`border rounded-3xl p-6 shadow-md transition-all ${isLight ? 'bg-white border-slate-200 text-black' : 'border-[#D4AF37]/25 bg-[#101A36]/60 text-white'}`}>
-            <h3 className={`text-lg font-serif font-bold uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2 ${isLight ? 'text-black border-slate-200' : 'text-[#D4AF37] border-[#D4AF37]/20'}`}>
-              🎨 Thème & Apparence
-            </h3>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`font-bold text-sm ${isLight ? 'text-black' : 'text-white'}`}>Mode d'affichage</p>
-                <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Basculez entre le mode clair et le mode sombre.</p>
-              </div>
-              <button
-                onClick={() => handleToggleTheme()}
-                className={`px-4 py-2 rounded-xl border font-serif uppercase tracking-wider text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${isLight ? 'bg-black text-white border-transparent hover:bg-slate-800' : 'bg-[#F7F5F0] text-black border-transparent hover:bg-white'}`}
-              >
-                {theme === 'light' ? (
-                  <>
-                    <Moon size={14} /> Mode Sombre
-                  </>
-                ) : (
-                  <>
-                    <Sun size={14} /> Mode Clair
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
 
           {/* Section: Audio */}
           <div className={`border rounded-3xl p-6 shadow-md transition-all ${isLight ? 'bg-white border-slate-200 text-black' : 'border-[#D4AF37]/25 bg-[#101A36]/60 text-white'}`}>
