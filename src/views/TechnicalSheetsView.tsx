@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Plus, Trash2, Edit2, Eye, Printer, Coins, Layers, Compass, Tag } from 'lucide-react';
-import { TechnicalSheet } from '../types';
-import { getSheets, saveSheets } from '../store';
+import { TechnicalSheet, Fossil } from '../types';
+import { getSheets, saveSheets, getFossils, saveFossils } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import ImageUpload from '../components/ImageUpload';
+import { parseFossilPrice } from '../utils/pricing';
 
 interface TechnicalSheetsViewProps {
   onBack: () => void;
@@ -16,7 +17,56 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    getSheets().then(s => setSheets(s));
+    Promise.all([getSheets(), getFossils()]).then(([loadedSheets, loadedFossils]) => {
+      let merged = [...loadedSheets];
+      let hasChanges = false;
+
+      // Ensure each fossil in the user's collection is represented in technical sheets
+      loadedFossils.forEach((f: Fossil) => {
+        const existing = merged.find(s => s.fossilId === f.id || (f.title && s.nom === f.title));
+        if (!existing) {
+          merged.push({
+            id: f.id || uuidv4(),
+            fossilId: f.id,
+            nom: f.title || 'Sans nom',
+            nomPhoto: f.carouselImage || f.mainImage || '',
+            provenance: f.discoveryLocation || '',
+            periode: f.detailedPeriodStart || f.period || '',
+            fossilDating: f.fossilDating || '',
+            typeSheet: f.techSheetType || 'achat',
+            dateAchat: f.techSheetDateAchat || '',
+            lieuAchat: f.techSheetLieuAchat || '',
+            certificat: f.techSheetCertificat || 'non',
+            certificatPhoto: f.techSheetCertificatPhoto || '',
+            prix: parseFossilPrice(f.techSheetPrix),
+            datePrelevement: f.techSheetDatePrelevement || '',
+            lieuPrelevement: f.techSheetLieuPrelevement || f.discoveryLocation || ''
+          });
+          hasChanges = true;
+        } else {
+          // If the sheet has 0 / empty price but the fossil record has a price
+          const sheetPrice = parseFossilPrice(existing.prix);
+          const fossilPrice = parseFossilPrice(f.techSheetPrix);
+          if (sheetPrice === 0 && fossilPrice > 0) {
+            existing.prix = fossilPrice;
+            hasChanges = true;
+          }
+          if (!existing.nomPhoto && (f.carouselImage || f.mainImage)) {
+            existing.nomPhoto = f.carouselImage || f.mainImage;
+            hasChanges = true;
+          }
+          if (!existing.fossilId) {
+            existing.fossilId = f.id;
+            hasChanges = true;
+          }
+        }
+      });
+
+      setSheets(merged);
+      if (hasChanges && merged.length > 0) {
+        saveSheets(merged);
+      }
+    });
   }, []);
 
   const save = async (newSheets: TechnicalSheet[]) => {
@@ -35,22 +85,51 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
       lieuAchat: '',
       certificat: '',
       certificatPhoto: '',
-      prix: 0
+      prix: 0,
+      typeSheet: 'achat'
     };
     save([...sheets, newSheet]);
     setIsEditing(true);
   };
 
-  const update = (id: string, field: keyof TechnicalSheet, value: any) => {
-    const newSheets = sheets.map(s => s.id === id ? { ...s, [field]: value } : s);
+  const update = async (id: string, field: keyof TechnicalSheet, value: any) => {
+    const finalValue = field === 'prix' ? parseFossilPrice(value) : value;
+    const newSheets = sheets.map(s => s.id === id ? { ...s, [field]: finalValue } : s);
     save(newSheets);
+
+    // Also update corresponding fossil if present
+    try {
+      const targetSheet = newSheets.find(s => s.id === id);
+      if (targetSheet && (targetSheet.fossilId || targetSheet.nom)) {
+        const fossils = await getFossils();
+        const fIdx = fossils.findIndex(f => f.id === targetSheet.fossilId || (targetSheet.nom && f.title === targetSheet.nom));
+        if (fIdx >= 0) {
+          if (field === 'prix') fossils[fIdx].techSheetPrix = finalValue;
+          if (field === 'typeSheet') fossils[fIdx].techSheetType = finalValue;
+          if (field === 'dateAchat') fossils[fIdx].techSheetDateAchat = finalValue;
+          if (field === 'lieuAchat') fossils[fIdx].techSheetLieuAchat = finalValue;
+          if (field === 'datePrelevement') fossils[fIdx].techSheetDatePrelevement = finalValue;
+          if (field === 'lieuPrelevement') fossils[fIdx].techSheetLieuPrelevement = finalValue;
+          if (field === 'certificat') fossils[fIdx].techSheetCertificat = finalValue;
+          if (field === 'certificatPhoto') fossils[fIdx].techSheetCertificatPhoto = finalValue;
+          await saveFossils(fossils);
+        }
+      }
+    } catch (err) {
+      console.warn("Fossil sync notice:", err);
+    }
   };
 
   const removeRow = (id: string) => {
     save(sheets.filter(s => s.id !== id));
   };
 
-  const totalValue = sheets.reduce((sum, s) => sum + (s.typeSheet === 'prelevement' ? 0 : (Number(s.prix) || 0)), 0);
+  const totalValue = sheets.reduce((sum, s) => {
+    if (s.typeSheet === 'prelevement') return sum;
+    const p = parseFossilPrice(s.prix);
+    return sum + p;
+  }, 0);
+
   const boughtCount = sheets.filter(s => (s.typeSheet || 'achat') === 'achat').length;
   const prelevementCount = sheets.filter(s => s.typeSheet === 'prelevement').length;
   const certifiedCount = sheets.filter(s => s.certificat === 'oui').length;
@@ -471,9 +550,10 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
                         <p className="text-xs italic opacity-60 text-right">-</p>
                       ) : (
                         <input 
-                          type="number" 
-                          value={sheet.prix === 0 ? '' : sheet.prix || ''} 
-                          onChange={e => update(sheet.id, 'prix', Number(e.target.value))}
+                          type="text"
+                          inputMode="decimal" 
+                          value={sheet.prix === 0 || sheet.prix === undefined ? '' : sheet.prix} 
+                          onChange={e => update(sheet.id, 'prix', e.target.value)}
                           placeholder="0 €"
                           className={`w-24 p-2 border rounded-xl outline-none text-right font-serif font-bold text-xs ${
                             isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
@@ -487,7 +567,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
                         <span className={`font-serif italic font-bold text-sm sm:text-base ${
                           isLight ? 'text-black' : 'text-[#D4AF37]'
                         }`}>
-                          {sheet.prix ? `${Number(sheet.prix).toFixed(2)} €` : '-'}
+                          {parseFossilPrice(sheet.prix) > 0 ? `${parseFossilPrice(sheet.prix).toFixed(2)} €` : '-'}
                         </span>
                       )
                     )}

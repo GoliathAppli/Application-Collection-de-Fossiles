@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Component, type ErrorInfo, type ReactNode } from 'react';
 import { Fossil, Period, TechnicalSheet, DatingUnit } from '../types';
 import ImageUpload from '../components/ImageUpload';
-import { ChevronLeft, Home, Printer, Plus, Trash2, Edit2, Info, ArrowLeft, Save, Eye, Sparkles, Calendar, Compass, Clock, BookOpen, Layers } from 'lucide-react';
+import { ChevronLeft, Home, Printer, Plus, Trash2, Edit2, Info, ArrowLeft, Save, Eye, Sparkles, Calendar, Compass, Clock, BookOpen, Layers, MapPin } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { geologicalEras, allSubPeriods, subPeriodsDetails } from '../geology';
 import { calculateFossilClassification, formatFossilDatingString } from '../utils/dating';
+import { parseFossilPrice } from '../utils/pricing';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -18,25 +19,80 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+// Resilient Map Error Boundary to prevent any blank screen crashes
+class MapErrorBoundary extends Component<{ children: ReactNode; fallbackText?: string }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.warn("Map rendering issue intercepted gracefully:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center text-xs opacity-75 font-sans">
+          <MapPin size={24} className="mb-2 opacity-50" />
+          <span>{(this.props as any).fallbackText || "Carte temporairement indisponible."}</span>
+        </div>
+      );
+    }
+    return (this.props as any).children;
+  }
+}
+
 const LocationMarker = ({ lat, lng, setLat, setLng, readOnly }: { lat?: number, lng?: number, setLat: (l: number) => void, setLng: (l: number) => void, readOnly?: boolean }) => {
   useMapEvents({
     click(e) {
-      if (!readOnly) {
-        setLat(e.latlng.lat);
-        setLng(e.latlng.lng);
+      if (!readOnly && e?.latlng) {
+        const clickedLat = Number(e.latlng.lat);
+        const clickedLng = Number(e.latlng.lng);
+        if (!isNaN(clickedLat) && isFinite(clickedLat) && !isNaN(clickedLng) && isFinite(clickedLng)) {
+          setLat(clickedLat);
+          setLng(clickedLng);
+        }
       }
     },
   });
-  return lat && lng ? (
-    <Marker position={[lat, lng]} />
-  ) : null;
+
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng) || !isFinite(lat) || !isFinite(lng)) {
+    return null;
+  }
+
+  return <Marker position={[lat, lng]} />;
 };
 
-const ChangeView = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
+const ChangeView = ({ lat, lng, zoom }: { lat: number; lng: number; zoom: number }) => {
   const map = useMap();
+  const prevCoordsRef = useRef<{ lat: number; lng: number }>({ lat, lng });
+
   useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
+    if (
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      !isNaN(lat) &&
+      !isNaN(lng) &&
+      isFinite(lat) &&
+      isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    ) {
+      if (prevCoordsRef.current.lat !== lat || prevCoordsRef.current.lng !== lng) {
+        prevCoordsRef.current = { lat, lng };
+        try {
+          map.setView([lat, lng], zoom, { animate: false });
+        } catch (err) {
+          console.warn("Leaflet setView notice:", err);
+        }
+      }
+    }
+  }, [lat, lng, zoom, map]);
+
   return null;
 };
 
@@ -87,7 +143,9 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       speciesType: 'animal',
       animalImage: '',
       speciesImages: [],
-      fossilDating: ''
+      fossilDating: '',
+      didYouKnowText: '',
+      didYouKnowImage: ''
     };
   });
 
@@ -181,19 +239,59 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
     setIsGeocoding(true);
     setGeocodeStatus(null);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}`);
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
-        update('discoveryLat', lat);
-        update('discoveryLng', lon);
-        setGeocodeStatus(`Position trouvée : ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-      } else {
-        setGeocodeStatus("Lieu non trouvé. Vous pouvez pointer manuellement sur la carte.");
+      // Clean query: remove special chars and extra comments in parentheses if present
+      const cleanPrimary = locName.replace(/\([^)]*\)/g, '').trim();
+      const queriesToTry = [
+        cleanPrimary,
+        // If comma present, try up to the first 2 segments (e.g. "Millau, Aveyron")
+        cleanPrimary.includes(',') ? cleanPrimary.split(',').slice(0, 2).join(',').trim() : '',
+        // If still no luck, try the first segment
+        cleanPrimary.includes(',') ? cleanPrimary.split(',')[0].trim() : ''
+      ].filter((q): q is string => Boolean(q && q.length > 1));
+
+      // Remove duplicate queries
+      const uniqueQueries = Array.from(new Set(queriesToTry));
+
+      let found = false;
+      for (const q of uniqueQueries) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
+            {
+              signal: controller.signal,
+              headers: {
+                'Accept-Language': 'fr,en'
+              }
+            }
+          );
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              if (!isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                update('discoveryLat', lat);
+                update('discoveryLng', lon);
+                const displayName = data[0].display_name ? data[0].display_name.split(',').slice(0, 3).join(',') : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                setGeocodeStatus(`Position trouvée : ${displayName}`);
+                found = true;
+                break;
+              }
+            }
+          }
+        } catch {
+          // try next query
+        }
       }
-    } catch (e) {
-      setGeocodeStatus("Erreur lors de la recherche. Vous pouvez pointer manuellement.");
+
+      if (!found) {
+        setGeocodeStatus("Lieu non repéré automatiquement. Vous pouvez cliquer directement sur la carte.");
+      }
+    } catch {
+      setGeocodeStatus("Recherche indisponible. Vous pouvez cliquer directement sur la carte.");
     } finally {
       setIsGeocoding(false);
     }
@@ -239,6 +337,8 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       ? classification.subPeriod
       : (fossil.detailedPeriodEnd || determinedStart);
 
+    const parsedPrice = parseFossilPrice(techSheet.prix);
+
     const updatedFossil: Fossil = {
       ...fossil,
       period: classification.period,
@@ -247,7 +347,16 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       datingUnit,
       datingValue,
       datingPrecision,
-      fossilDating: computedDatingString
+      fossilDating: computedDatingString,
+      techSheetType: techSheet.typeSheet || 'achat',
+      techSheetDatePrelevement: techSheet.datePrelevement || '',
+      techSheetLieuPrelevement: techSheet.lieuPrelevement || '',
+      techSheetProvenance: techSheet.provenance || fossil.discoveryLocation || '',
+      techSheetDateAchat: techSheet.dateAchat || '',
+      techSheetLieuAchat: techSheet.lieuAchat || '',
+      techSheetCertificat: techSheet.certificat || 'non',
+      techSheetCertificatPhoto: techSheet.certificatPhoto || '',
+      techSheetPrix: parsedPrice
     };
 
     onSave(updatedFossil);
@@ -264,7 +373,8 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       provenance: updatedFossil.discoveryLocation || techSheet.provenance,
       periode: updatedFossil.period,
       fossilDating: computedDatingString,
-      typeSheet: techSheet.typeSheet || 'achat'
+      typeSheet: techSheet.typeSheet || 'achat',
+      prix: parsedPrice
     };
 
     if (existingIndex >= 0) {
@@ -594,7 +704,6 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
         <textarea
           value={fossil.discoveryLocation}
           onChange={e => update('discoveryLocation', e.target.value)}
-          onBlur={e => handleGeocode(e.target.value)}
           className={`w-full p-4 border min-h-[80px] rounded-xl font-sans resize-y outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
           placeholder="Nom du lieu (ex: Millau, Aveyron, France) et autres détails..."
         />
@@ -609,28 +718,30 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
           >
             {isGeocoding ? (
               <>
-                <span className="animate-spin inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full"></span>
+                <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span>
                 Localisation en cours...
               </>
             ) : "🔍 Pointer sur la carte automatiquement"}
           </button>
           {geocodeStatus && (
-            <span className={`text-xs font-sans italic ${geocodeStatus.includes('⚠️') ? 'text-red-500' : 'text-emerald-600'}`}>
+            <span className={`text-xs font-sans italic ${geocodeStatus.includes('⚠️') || geocodeStatus.includes('indisponible') || geocodeStatus.includes('non repéré') ? 'text-amber-500' : 'text-emerald-600'}`}>
               {geocodeStatus}
             </span>
           )}
         </div>
         <div className={`h-64 w-full border rounded-2xl overflow-hidden relative z-0 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/25'}`}>
-          <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full">
-            <ChangeView center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} />
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <LocationMarker 
-              lat={fossil.discoveryLat} 
-              lng={fossil.discoveryLng} 
-              setLat={(lat) => update('discoveryLat', lat)} 
-              setLng={(lng) => update('discoveryLng', lng)} 
-            />
-          </MapContainer>
+          <MapErrorBoundary fallbackText="Carte en cours de chargement...">
+            <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full">
+              <ChangeView lat={fossil.discoveryLat || 46.2276} lng={fossil.discoveryLng || 2.2137} zoom={fossil.discoveryLat ? 10 : 4} />
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <LocationMarker 
+                lat={fossil.discoveryLat} 
+                lng={fossil.discoveryLng} 
+                setLat={(lat) => update('discoveryLat', lat)} 
+                setLng={(lng) => update('discoveryLng', lng)} 
+              />
+            </MapContainer>
+          </MapErrorBoundary>
         </div>
         <p className={`text-xs italic ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Cliquez sur la carte pour définir le point exact de la découverte s'il n'est pas déjà pointé.</p>
       </div>
@@ -792,9 +903,10 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
               <div>
                 <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Prix d'achat (€)</label>
                 <input 
-                  type="number"
-                  value={techSheet.prix || ''}
-                  onChange={e => updateTechSheet('prix', Number(e.target.value))}
+                  type="text"
+                  inputMode="decimal"
+                  value={techSheet.prix === 0 || techSheet.prix === undefined ? '' : techSheet.prix}
+                  onChange={e => updateTechSheet('prix', e.target.value)}
                   className={`w-full p-3 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black placeholder-slate-400' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37] placeholder-slate-500'}`}
                   placeholder="Ex: 150"
                 />
@@ -1075,11 +1187,13 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                   <p className={`font-sans mb-4 font-medium ${isLight ? 'text-black' : 'text-slate-200'}`}>{fossil.discoveryLocation}</p>
                   
                   <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
-                     <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full" zoomControl={true} dragging={true} scrollWheelZoom={true}>
-                       <ChangeView center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} />
-                       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                       <LocationMarker lat={fossil.discoveryLat} lng={fossil.discoveryLng} setLat={()=>{}} setLng={()=>{}} readOnly={true} />
-                     </MapContainer>
+                    <MapErrorBoundary fallbackText="Carte indisponible">
+                      <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full" zoomControl={true} dragging={true} scrollWheelZoom={true}>
+                        <ChangeView lat={fossil.discoveryLat || 46.2276} lng={fossil.discoveryLng || 2.2137} zoom={fossil.discoveryLat ? 10 : 4} />
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        <LocationMarker lat={fossil.discoveryLat} lng={fossil.discoveryLng} setLat={()=>{}} setLng={()=>{}} readOnly={true} />
+                      </MapContainer>
+                    </MapErrorBoundary>
                   </div>
                </div>
            </div>
