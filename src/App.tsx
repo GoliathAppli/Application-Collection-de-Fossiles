@@ -380,48 +380,48 @@ export default function App() {
 
       let htmlContent: string | null = null;
 
-      // 1. In static environment (e.g. GitHub Pages), fetch the current bundle directly via GET
-      const candidates = [
-        './Mon_Exposition_Fossiles.html',
-        './index.html',
-        window.location.pathname.endsWith('.html') ? window.location.pathname : `${window.location.pathname.replace(/\/$/, '')}/index.html`,
-        window.location.href
-      ];
+      // 1. Try the backend compiler endpoint first so it freshly compiles the singlefile bundle
+      try {
+        const response = await fetch('/api/download-app', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            data: dataStr,
+            banner: homeImg || '/banner.png'
+          })
+        });
 
-      for (const candidate of candidates) {
-        try {
-          const res = await fetch(candidate, { method: 'GET', cache: 'no-cache' });
-          if (res.ok) {
-            const text = await res.text();
-            if (text.includes('<html') && text.length > 50000) {
-              htmlContent = text;
-              break;
-            }
-          }
-        } catch (_) {
-          // ignore and try next
+        if (response.ok) {
+          htmlContent = await response.text();
         }
+      } catch (e) {
+        console.warn("Backend compiler endpoint unavailable, falling back to static bundles:", e);
       }
 
-      // 2. If not found or in development mode, try the backend API endpoint
+      // 2. If running on a static host without backend (e.g. GitHub Pages or offline copy), fetch existing bundle
       if (!htmlContent) {
-        try {
-          const response = await fetch('/api/download-app', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              data: dataStr,
-              banner: homeImg || '/banner.png'
-            })
-          });
+        const candidates = [
+          './Mon_Exposition_Fossiles.html',
+          './index.html',
+          window.location.pathname.endsWith('.html') ? window.location.pathname : `${window.location.pathname.replace(/\/$/, '')}/index.html`,
+          window.location.href
+        ];
 
-          if (response.ok) {
-            htmlContent = await response.text();
+        for (const candidate of candidates) {
+          try {
+            const res = await fetch(candidate, { method: 'GET', cache: 'no-cache' });
+            if (res.ok) {
+              const text = await res.text();
+              if (text.includes('<html') && text.length > 50000) {
+                htmlContent = text;
+                break;
+              }
+            }
+          } catch (_) {
+            // ignore and try next
           }
-        } catch (_) {
-          // Ignore backend failure if static fetch worked
         }
       }
 
@@ -429,12 +429,12 @@ export default function App() {
         throw new Error("Impossible de récupérer le fichier autonome. Veuillez vérifier votre connexion.");
       }
 
-      // Inject the current data and banner
+      // Inject the current data and banner if needed
       if (htmlContent.includes('window.__INITIAL_DATA__ = null;')) {
         htmlContent = htmlContent.replace('window.__INITIAL_DATA__ = null;', `window.__INITIAL_DATA__ = ${dataStr};`);
       } else if (htmlContent.includes('window.__INITIAL_DATA__=')) {
         htmlContent = htmlContent.replace(/window\.__INITIAL_DATA__\s*=\s*[^;]+;/, `window.__INITIAL_DATA__ = ${dataStr};`);
-      } else {
+      } else if (!htmlContent.includes(dataStr.slice(0, 30))) {
         htmlContent = htmlContent.replace('<head>', `<head><script>window.__INITIAL_DATA__ = ${dataStr};</script>`);
       }
 
@@ -443,7 +443,7 @@ export default function App() {
           htmlContent = htmlContent.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};`);
         } else if (htmlContent.includes('window.__INITIAL_BANNER__=')) {
           htmlContent = htmlContent.replace(/window\.__INITIAL_BANNER__\s*=\s*[^;]+;/, `window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};`);
-        } else {
+        } else if (!htmlContent.includes(homeImg.slice(0, 30))) {
           htmlContent = htmlContent.replace('<head>', `<head><script>window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};</script>`);
         }
       }

@@ -1,6 +1,7 @@
 import localforage from 'localforage';
 import { Fossil, TechnicalSheet } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import { parseFossilPrice } from './utils/pricing';
 
 export const fossilStore = localforage.createInstance({
   name: 'fossilApp',
@@ -64,7 +65,62 @@ export async function exportData(): Promise<string> {
   const fossils = await getFossils();
   const sheets = await getSheets();
   const homeImage = await fossilStore.getItem<string>('homeImage');
-  return JSON.stringify({ fossils, sheets, homeImage });
+
+  // Ensure all fossils with their prices, dates, and locations are fully represented in sheets before export
+  const sheetMap = new Map<string, TechnicalSheet>();
+  (sheets || []).forEach(s => {
+    const key = s.fossilId || s.id || s.nom;
+    if (key) sheetMap.set(key, { ...s });
+  });
+
+  (fossils || []).forEach(f => {
+    const existingKey = f.id && sheetMap.has(f.id)
+      ? f.id
+      : Array.from(sheetMap.keys()).find(k => {
+          const item = sheetMap.get(k);
+          return item && (item.fossilId === f.id || (f.title && item.nom === f.title));
+        });
+
+    const parsedPrice = parseFossilPrice(f.techSheetPrix);
+
+    if (existingKey) {
+      const item = sheetMap.get(existingKey)!;
+      if (!item.fossilId && f.id) item.fossilId = f.id;
+      if (f.title && !item.nom) item.nom = f.title;
+      if (!item.nomPhoto && (f.carouselImage || f.mainImage)) item.nomPhoto = f.carouselImage || f.mainImage;
+      if (!item.provenance && (f.techSheetProvenance || f.discoveryLocation)) item.provenance = f.techSheetProvenance || f.discoveryLocation || '';
+      if (!item.periode && (f.detailedPeriodStart || f.period)) item.periode = f.detailedPeriodStart || f.period || '';
+      if (!item.fossilDating && f.fossilDating) item.fossilDating = f.fossilDating;
+      if (parsedPrice > 0 && (!item.prix || item.prix === 0)) item.prix = parsedPrice;
+      if (!item.typeSheet && f.techSheetType) item.typeSheet = f.techSheetType;
+      if (!item.dateAchat && f.techSheetDateAchat) item.dateAchat = f.techSheetDateAchat;
+      if (!item.lieuAchat && f.techSheetLieuAchat) item.lieuAchat = f.techSheetLieuAchat;
+      if (!item.datePrelevement && f.techSheetDatePrelevement) item.datePrelevement = f.techSheetDatePrelevement;
+      if (!item.lieuPrelevement && f.techSheetLieuPrelevement) item.lieuPrelevement = f.techSheetLieuPrelevement;
+    } else {
+      const newSheet: TechnicalSheet = {
+        id: f.id || uuidv4(),
+        fossilId: f.id,
+        nom: f.title || 'Sans nom',
+        nomPhoto: f.carouselImage || f.mainImage || '',
+        provenance: f.techSheetProvenance || f.discoveryLocation || '',
+        periode: f.detailedPeriodStart || f.period || '',
+        fossilDating: f.fossilDating || '',
+        typeSheet: f.techSheetType || 'achat',
+        dateAchat: f.techSheetDateAchat || '',
+        lieuAchat: f.techSheetLieuAchat || '',
+        certificat: f.techSheetCertificat || 'non',
+        certificatPhoto: f.techSheetCertificatPhoto || '',
+        prix: parsedPrice,
+        datePrelevement: f.techSheetDatePrelevement || '',
+        lieuPrelevement: f.techSheetLieuPrelevement || f.discoveryLocation || ''
+      };
+      sheetMap.set(newSheet.id, newSheet);
+    }
+  });
+
+  const finalSheets = Array.from(sheetMap.values());
+  return JSON.stringify({ fossils, sheets: finalSheets, homeImage: homeImage || '' });
 }
 
 export async function importData(json: string) {

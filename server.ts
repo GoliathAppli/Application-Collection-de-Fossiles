@@ -17,14 +17,18 @@ async function startServer() {
       const { data, banner } = req.body;
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
-      if (!fs.existsSync(distPath)) {
-        await new Promise<void>((resolve, reject) => {
-          exec('npx vite build', (err) => {
-            if (err) return reject(err);
-            resolve();
-          });
+      // Always rebuild to ensure the downloaded standalone app includes the latest code, features, and fixes
+      await new Promise<void>((resolve, reject) => {
+        exec('npx vite build', (err, stdout, stderr) => {
+          if (err) {
+            console.error("Vite build error during download-app:", stderr || err);
+            // If previous bundle exists, continue, else reject
+            if (fs.existsSync(distPath)) return resolve();
+            return reject(err);
+          }
+          resolve();
         });
-      }
+      });
       
       if (!fs.existsSync(distPath)) {
         return res.status(500).send("Erreur: Le fichier autonome n'a pas pu être compilé.");
@@ -33,7 +37,13 @@ async function startServer() {
       let html = fs.readFileSync(distPath, 'utf8');
       
       if (data) {
-        html = html.replace('window.__INITIAL_DATA__ = null;', `window.__INITIAL_DATA__ = ${data};`);
+        if (html.includes('window.__INITIAL_DATA__ = null;')) {
+          html = html.replace('window.__INITIAL_DATA__ = null;', `window.__INITIAL_DATA__ = ${data};`);
+        } else if (html.includes('window.__INITIAL_DATA__=')) {
+          html = html.replace(/window\.__INITIAL_DATA__\s*=\s*[^;]+;/, `window.__INITIAL_DATA__ = ${data};`);
+        } else {
+          html = html.replace('<head>', `<head><script>window.__INITIAL_DATA__ = ${data};</script>`);
+        }
       }
       
       let bannerContent = banner;
@@ -50,7 +60,13 @@ async function startServer() {
       }
       
       if (bannerContent) {
-         html = html.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
+         if (html.includes('window.__INITIAL_BANNER__ = null;')) {
+           html = html.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
+         } else if (html.includes('window.__INITIAL_BANNER__=')) {
+           html = html.replace(/window\.__INITIAL_BANNER__\s*=\s*[^;]+;/, `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
+         } else {
+           html = html.replace('<head>', `<head><script>window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};</script>`);
+         }
       }
       
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
