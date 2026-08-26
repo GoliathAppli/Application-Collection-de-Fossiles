@@ -13,11 +13,46 @@ export const sheetStore = localforage.createInstance({
   storeName: 'sheets'
 });
 
+let initDataProcessed = false;
+
+async function checkAndSyncInitialData() {
+  if (initDataProcessed) return;
+  initDataProcessed = true;
+
+  try {
+    const initData = (window as any).__INITIAL_DATA__;
+    if (initData && (initData.fossils || initData.sheets)) {
+      const storedExportId = await fossilStore.getItem<string>('currentExportId');
+      const incomingExportId = initData.exportId || 'embedded_init';
+
+      // If opening a new standalone HTML with new exportId, or if local storage is empty, initialize from embedded data
+      const existingFossils = await fossilStore.getItem<Fossil[]>('fossilList');
+      if (!storedExportId || storedExportId !== incomingExportId || !existingFossils || existingFossils.length === 0) {
+        if (Array.isArray(initData.fossils) && initData.fossils.length > 0) {
+          await fossilStore.setItem('fossilList', initData.fossils);
+        }
+        if (Array.isArray(initData.sheets) && initData.sheets.length > 0) {
+          await sheetStore.setItem('sheetList', initData.sheets);
+        }
+        if (initData.homeImage) {
+          await fossilStore.setItem('homeImage', initData.homeImage);
+        }
+        await fossilStore.setItem('currentExportId', incomingExportId);
+      }
+    }
+  } catch (err) {
+    console.warn("Initial data sync notice:", err);
+  }
+}
+
 export async function getFossils(): Promise<Fossil[]> {
+  await checkAndSyncInitialData();
   const fossils = await fossilStore.getItem<Fossil[]>('fossilList');
   if (!fossils || fossils.length === 0) {
     if ((window as any).__INITIAL_DATA__ && (window as any).__INITIAL_DATA__.fossils) {
-      return (window as any).__INITIAL_DATA__.fossils;
+      const initFossils = (window as any).__INITIAL_DATA__.fossils;
+      await saveFossils(initFossils);
+      return initFossils;
     }
     const defaults = createDefaultFossils();
     await saveFossils(defaults);
@@ -32,10 +67,13 @@ export async function saveFossils(fossils: Fossil[]) {
 }
 
 export async function getSheets(): Promise<TechnicalSheet[]> {
+  await checkAndSyncInitialData();
   const sheets = await sheetStore.getItem<TechnicalSheet[]>('sheetList');
   if (!sheets || sheets.length === 0) {
     if ((window as any).__INITIAL_DATA__ && (window as any).__INITIAL_DATA__.sheets) {
-      return (window as any).__INITIAL_DATA__.sheets;
+      const initSheets = (window as any).__INITIAL_DATA__.sheets;
+      await saveSheets(initSheets);
+      return initSheets;
     }
     return [];
   }
@@ -120,7 +158,14 @@ export async function exportData(): Promise<string> {
   });
 
   const finalSheets = Array.from(sheetMap.values());
-  return JSON.stringify({ fossils, sheets: finalSheets, homeImage: homeImage || '' });
+  const exportPayload = {
+    exportId: uuidv4(),
+    exportTimestamp: Date.now(),
+    fossils,
+    sheets: finalSheets,
+    homeImage: homeImage || ''
+  };
+  return JSON.stringify(exportPayload);
 }
 
 export async function importData(json: string) {

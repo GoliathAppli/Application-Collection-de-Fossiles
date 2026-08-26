@@ -17,18 +17,18 @@ async function startServer() {
       const { data, banner } = req.body;
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
-      // Always rebuild to ensure the downloaded standalone app includes the latest code, features, and fixes
-      await new Promise<void>((resolve, reject) => {
-        exec('npx vite build', (err, stdout, stderr) => {
-          if (err) {
-            console.error("Vite build error during download-app:", stderr || err);
-            // If previous bundle exists, continue, else reject
-            if (fs.existsSync(distPath)) return resolve();
-            return reject(err);
-          }
-          resolve();
+      if (!fs.existsSync(distPath)) {
+        await new Promise<void>((resolve, reject) => {
+          exec('npx vite build', (err, stdout, stderr) => {
+            if (err) {
+              console.error("Vite build error during download-app:", stderr || err);
+              if (fs.existsSync(distPath)) return resolve();
+              return reject(err);
+            }
+            resolve();
+          });
         });
-      });
+      }
       
       if (!fs.existsSync(distPath)) {
         return res.status(500).send("Erreur: Le fichier autonome n'a pas pu être compilé.");
