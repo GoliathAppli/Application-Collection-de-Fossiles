@@ -193,14 +193,61 @@ export default function App() {
         }
       }
 
-      const { saveDirectoryHandle, getSheets, getHomeImage } = await import('./store');
+      const { readFromLocalDirectory, saveDirectoryHandle, saveFossils, saveSheets, saveHomeImage, getSheets, getHomeImage } = await import('./store');
+      
+      // 1. Check if the directory already contains a saved JSON backup
+      const existingBackup = await readFromLocalDirectory(handle);
+      const hasExistingFossils = existingBackup && existingBackup.fossils && existingBackup.fossils.length > 0;
+
+      if (hasExistingFossils) {
+        // If current app is empty (0 fossils, e.g. after clearing browser history)
+        if (fossils.length === 0) {
+          setFossils(existingBackup.fossils);
+          if (existingBackup.homeImage) setBannerImage(existingBackup.homeImage);
+          
+          await saveFossils(existingBackup.fossils);
+          await saveSheets(existingBackup.sheets || []);
+          if (existingBackup.homeImage) await saveHomeImage(existingBackup.homeImage);
+          await saveDirectoryHandle(handle, existingBackup.fossils, existingBackup.sheets || [], existingBackup.homeImage || '');
+          
+          setDirHandle(handle);
+          setDirPermissionGranted(true);
+          setDirSyncStatus(`✅ Dossier synchronisé ! ${existingBackup.fossils.length} fiches de fossiles restaurées avec succès depuis le dossier.`);
+          setTimeout(() => setDirSyncStatus(null), 6000);
+          return;
+        } else {
+          // Both app and directory have fossils - ask user to choose direction
+          const confirmRestore = window.confirm(
+            `Ce dossier local contient déjà une sauvegarde avec ${existingBackup.fossils.length} fiche(s) de fossile(s).\n\n` +
+            `• Cliquez sur [OK] pour RESTAURER / CHARGER les données du dossier dans l'application.\n` +
+            `• Cliquez sur [Annuler] pour CONSERVER vos fiches actuellement affichées (${fossils.length} fossile(s)) et écraser la sauvegarde du dossier.`
+          );
+
+          if (confirmRestore) {
+            setFossils(existingBackup.fossils);
+            if (existingBackup.homeImage) setBannerImage(existingBackup.homeImage);
+            
+            await saveFossils(existingBackup.fossils);
+            await saveSheets(existingBackup.sheets || []);
+            if (existingBackup.homeImage) await saveHomeImage(existingBackup.homeImage);
+            await saveDirectoryHandle(handle, existingBackup.fossils, existingBackup.sheets || [], existingBackup.homeImage || '');
+            
+            setDirHandle(handle);
+            setDirPermissionGranted(true);
+            setDirSyncStatus(`✅ ${existingBackup.fossils.length} fiches chargées depuis le dossier local !`);
+            setTimeout(() => setDirSyncStatus(null), 6000);
+            return;
+          }
+        }
+      }
+
+      // Default: Write current state to the folder
       const currentSheets = await getSheets();
       const currentBanner = bannerImage || await getHomeImage();
-      // Pass all active state data (including all previous changes before linking) to write immediately
       await saveDirectoryHandle(handle, fossils, currentSheets, currentBanner);
       setDirHandle(handle);
       setDirPermissionGranted(true);
-      setDirSyncStatus("✅ Dossier local synchronisé ! Toutes vos modifications (y compris antérieures) ont été enregistrées.");
+      setDirSyncStatus("✅ Dossier local synchronisé ! Toutes vos modifications sont enregistrées automatiquement.");
       setTimeout(() => setDirSyncStatus(null), 6000);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -216,7 +263,24 @@ export default function App() {
       const permission = await dirHandle.requestPermission({ mode: 'readwrite' });
       if (permission === 'granted') {
         setDirPermissionGranted(true);
-        const { syncToLocalDirectory, getSheets, getHomeImage } = await import('./store');
+        const { readFromLocalDirectory, syncToLocalDirectory, saveFossils, saveSheets, saveHomeImage, getSheets, getHomeImage } = await import('./store');
+        
+        // If app has no fossils, check if directory has backup to restore
+        if (fossils.length === 0) {
+          const existingBackup = await readFromLocalDirectory(dirHandle);
+          if (existingBackup && existingBackup.fossils && existingBackup.fossils.length > 0) {
+            setFossils(existingBackup.fossils);
+            if (existingBackup.homeImage) setBannerImage(existingBackup.homeImage);
+            await saveFossils(existingBackup.fossils);
+            await saveSheets(existingBackup.sheets || []);
+            if (existingBackup.homeImage) await saveHomeImage(existingBackup.homeImage);
+            await syncToLocalDirectory(existingBackup.fossils, existingBackup.sheets || [], existingBackup.homeImage || '', dirHandle);
+            setDirSyncStatus(`✅ Connexion restaurée et ${existingBackup.fossils.length} fiches rechargées depuis le dossier !`);
+            setTimeout(() => setDirSyncStatus(null), 5000);
+            return;
+          }
+        }
+
         const currentSheets = await getSheets();
         const currentBanner = bannerImage || await getHomeImage();
         const success = await syncToLocalDirectory(fossils, currentSheets, currentBanner, dirHandle);

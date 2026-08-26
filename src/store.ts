@@ -82,11 +82,46 @@ export async function importData(json: string) {
 }
 
 // Directory handle storage and auto-sync methods
+export async function readFromLocalDirectory(handle?: any): Promise<{ fossils: Fossil[], sheets: TechnicalSheet[], homeImage?: string } | null> {
+  try {
+    const dirHandle = handle || await getDirectoryHandle();
+    if (!dirHandle) return null;
+
+    try {
+      const options = { mode: 'readwrite' };
+      let permission = await dirHandle.queryPermission(options);
+      if (permission !== 'granted' && typeof dirHandle.requestPermission === 'function') {
+        permission = await dirHandle.requestPermission(options);
+      }
+      if (permission !== 'granted') return null;
+    } catch {
+      // ignore
+    }
+
+    const fileHandle = await dirHandle.getFileHandle('fossiles_sauvegarde_auto.json');
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    if (!text || !text.trim()) return null;
+    const data = JSON.parse(text);
+    if (data && (Array.isArray(data.fossils) || Array.isArray(data.sheets) || data.homeImage)) {
+      return {
+        fossils: Array.isArray(data.fossils) ? data.fossils : [],
+        sheets: Array.isArray(data.sheets) ? data.sheets : [],
+        homeImage: data.homeImage || ''
+      };
+    }
+    return null;
+  } catch (err) {
+    console.log("Aucune sauvegarde JSON préexistante trouvée dans le dossier local ou lecture impossible:", err);
+    return null;
+  }
+}
+
 export async function saveDirectoryHandle(handle: any, directFossils?: Fossil[], directSheets?: TechnicalSheet[], directHomeImage?: string) {
   await fossilStore.setItem('localDirectoryHandle', handle);
   
-  const currentFossils = (directFossils && directFossils.length > 0) ? directFossils : await getFossils();
-  const currentSheets = (directSheets && directSheets.length > 0) ? directSheets : await getSheets();
+  const currentFossils = (directFossils !== undefined) ? directFossils : await getFossils();
+  const currentSheets = (directSheets !== undefined) ? directSheets : await getSheets();
   const currentHomeImage = directHomeImage !== undefined ? directHomeImage : await getHomeImage();
   
   await fossilStore.setItem('fossilList', currentFossils);
