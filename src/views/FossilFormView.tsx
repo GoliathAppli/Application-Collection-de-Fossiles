@@ -149,44 +149,49 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
     };
   });
 
-  const [techSheet, setTechSheet] = useState<TechnicalSheet>({
-    id: uuidv4(),
-    nom: '',
-    nomPhoto: '',
-    provenance: '',
-    periode: period,
-    fossilDating: '',
-    dateAchat: '',
-    lieuAchat: '',
-    certificat: 'non',
-    certificatPhoto: '',
-    prix: 0,
-    typeSheet: 'achat',
-    datePrelevement: '',
-    lieuPrelevement: ''
+  const [techSheet, setTechSheet] = useState<TechnicalSheet>(() => {
+    return {
+      id: existingFossil?.id || uuidv4(),
+      fossilId: existingFossil?.id,
+      nom: existingFossil?.title || '',
+      nomPhoto: existingFossil?.carouselImage || existingFossil?.mainImage || '',
+      provenance: existingFossil?.techSheetProvenance || existingFossil?.discoveryLocation || '',
+      periode: existingFossil?.detailedPeriodStart || existingFossil?.period || period,
+      fossilDating: existingFossil?.fossilDating || '',
+      dateAchat: existingFossil?.techSheetDateAchat || '',
+      lieuAchat: existingFossil?.techSheetLieuAchat || '',
+      certificat: existingFossil?.techSheetCertificat || 'non',
+      certificatPhoto: existingFossil?.techSheetCertificatPhoto || '',
+      prix: existingFossil?.techSheetPrix !== undefined ? parseFossilPrice(existingFossil.techSheetPrix) : 0,
+      typeSheet: existingFossil?.techSheetType || 'achat',
+      datePrelevement: existingFossil?.techSheetDatePrelevement || '',
+      lieuPrelevement: existingFossil?.techSheetLieuPrelevement || ''
+    };
   });
 
   useEffect(() => {
+    let isMounted = true;
     getSheets().then(sheets => {
-      const match = sheets.find(s => s.fossilId === fossil.id || (fossil.title && s.nom === fossil.title));
+      if (!isMounted) return;
+      const match = sheets.find(s => 
+        (fossil.id && s.fossilId === fossil.id) || 
+        (fossil.id && s.id === fossil.id) || 
+        (fossil.title && s.nom === fossil.title)
+      );
       if (match) {
-        setTechSheet({
-          ...match,
-          typeSheet: match.typeSheet || 'achat'
-        });
-      } else {
         setTechSheet(prev => ({
           ...prev,
-          fossilId: fossil.id,
-          nom: fossil.title,
-          nomPhoto: fossil.carouselImage || fossil.mainImage,
-          provenance: fossil.discoveryLocation,
-          periode: fossil.period,
-          fossilDating: fossil.fossilDating || ''
+          ...match,
+          typeSheet: match.typeSheet || prev.typeSheet || 'achat',
+          // Preserve whichever price is non-zero
+          prix: match.prix !== undefined && match.prix !== null && parseFossilPrice(match.prix) > 0 
+            ? parseFossilPrice(match.prix) 
+            : (prev.prix !== undefined && prev.prix !== null && parseFossilPrice(prev.prix) > 0 ? parseFossilPrice(prev.prix) : (parseFossilPrice(existingFossil?.techSheetPrix) || 0))
         }));
       }
     });
-  }, [fossil.id]);
+    return () => { isMounted = false; };
+  }, [fossil.id, fossil.title]);
 
   const [datingUnit, setDatingUnit] = useState<DatingUnit>(() => {
     if (existingFossil?.datingUnit) return existingFossil.datingUnit;
