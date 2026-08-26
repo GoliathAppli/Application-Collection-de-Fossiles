@@ -171,19 +171,19 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
   useEffect(() => {
     let isMounted = true;
+    if (!existingFossil) return;
     getSheets().then(sheets => {
       if (!isMounted) return;
       const match = sheets.find(s => 
-        (fossil.id && s.fossilId === fossil.id) || 
-        (fossil.id && s.id === fossil.id) || 
-        (fossil.title && s.nom === fossil.title)
+        (existingFossil.id && s.fossilId === existingFossil.id) || 
+        (existingFossil.id && s.id === existingFossil.id)
       );
       if (match) {
         setTechSheet(prev => ({
           ...prev,
           ...match,
-          typeSheet: match.typeSheet || prev.typeSheet || 'achat',
-          // Preserve whichever price is non-zero
+          typeSheet: match.typeSheet || prev.typeSheet || existingFossil.techSheetType || 'achat',
+          // Preserve non-zero price
           prix: match.prix !== undefined && match.prix !== null && parseFossilPrice(match.prix) > 0 
             ? parseFossilPrice(match.prix) 
             : (prev.prix !== undefined && prev.prix !== null && parseFossilPrice(prev.prix) > 0 ? parseFossilPrice(prev.prix) : (parseFossilPrice(existingFossil?.techSheetPrix) || 0))
@@ -191,7 +191,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       }
     });
     return () => { isMounted = false; };
-  }, [fossil.id, fossil.title]);
+  }, [existingFossil?.id]);
 
   const [datingUnit, setDatingUnit] = useState<DatingUnit>(() => {
     if (existingFossil?.datingUnit) return existingFossil.datingUnit;
@@ -364,32 +364,47 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       techSheetPrix: parsedPrice
     };
 
-    onSave(updatedFossil);
-    
-    // Save or update technical sheet
-    const sheets = await getSheets();
-    const existingIndex = sheets.findIndex(s => s.fossilId === updatedFossil.id || (updatedFossil.title && s.nom === updatedFossil.title));
-    
-    const updatedSheet: TechnicalSheet = {
-      ...techSheet,
-      fossilId: updatedFossil.id,
-      nom: updatedFossil.title,
-      nomPhoto: updatedFossil.carouselImage || updatedFossil.mainImage || techSheet.nomPhoto,
-      provenance: updatedFossil.discoveryLocation || techSheet.provenance,
-      periode: updatedFossil.period,
-      fossilDating: computedDatingString,
-      typeSheet: techSheet.typeSheet || 'achat',
-      prix: parsedPrice
-    };
+    // Save or update technical sheet in persistent store
+    try {
+      const sheets = await getSheets();
+      const existingIndex = sheets.findIndex(s => 
+        (updatedFossil.id && s.fossilId === updatedFossil.id) || 
+        (updatedFossil.id && s.id === updatedFossil.id) || 
+        (updatedFossil.title && s.nom === updatedFossil.title)
+      );
+      
+      const updatedSheet: TechnicalSheet = {
+        ...techSheet,
+        id: (existingIndex >= 0 ? sheets[existingIndex].id : techSheet.id) || updatedFossil.id,
+        fossilId: updatedFossil.id,
+        nom: updatedFossil.title || 'Sans nom',
+        nomPhoto: updatedFossil.carouselImage || updatedFossil.mainImage || techSheet.nomPhoto || '',
+        provenance: techSheet.provenance || updatedFossil.discoveryLocation || '',
+        periode: updatedFossil.detailedPeriodStart || updatedFossil.period || '',
+        fossilDating: computedDatingString,
+        typeSheet: techSheet.typeSheet || 'achat',
+        dateAchat: techSheet.dateAchat || '',
+        lieuAchat: techSheet.lieuAchat || '',
+        datePrelevement: techSheet.datePrelevement || '',
+        lieuPrelevement: techSheet.lieuPrelevement || '',
+        certificat: techSheet.certificat || 'non',
+        certificatPhoto: techSheet.certificatPhoto || '',
+        prix: parsedPrice
+      };
 
-    if (existingIndex >= 0) {
-      sheets[existingIndex] = updatedSheet;
-    } else {
-      sheets.push(updatedSheet);
+      if (existingIndex >= 0) {
+        sheets[existingIndex] = updatedSheet;
+      } else {
+        sheets.push(updatedSheet);
+      }
+      await saveSheets(sheets);
+    } catch (err) {
+      console.error("Error saving sheet in FossilFormView:", err);
     }
-    await saveSheets(sheets);
+
     setFossil(updatedFossil);
     setIsEditing(false);
+    await onSave(updatedFossil);
   };
 
   const handlePrint = () => {

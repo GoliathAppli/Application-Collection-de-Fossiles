@@ -1051,6 +1051,45 @@ export default function App() {
               const newFossils = editingFossil ? fossils.map(x => x.id === f.id ? f : x) : [...fossils, f];
               setFossils(newFossils);
               await saveFossils(newFossils);
+
+              // Double check sheets store synchronization
+              try {
+                const { getSheets, saveSheets } = await import('./store');
+                const sheets = await getSheets();
+                const idx = sheets.findIndex(s => 
+                  (f.id && s.fossilId === f.id) || 
+                  (f.id && s.id === f.id) || 
+                  (f.title && s.nom === f.title)
+                );
+                const { parseFossilPrice } = await import('./utils/pricing');
+                const priceVal = parseFossilPrice(f.techSheetPrix);
+                const sheetData = {
+                  id: (idx >= 0 ? sheets[idx].id : f.id),
+                  fossilId: f.id,
+                  nom: f.title || 'Sans nom',
+                  nomPhoto: f.carouselImage || f.mainImage || '',
+                  provenance: f.techSheetProvenance || f.discoveryLocation || '',
+                  periode: f.detailedPeriodStart || f.period || '',
+                  fossilDating: f.fossilDating || '',
+                  typeSheet: f.techSheetType || 'achat',
+                  dateAchat: f.techSheetDateAchat || '',
+                  lieuAchat: f.techSheetLieuAchat || '',
+                  certificat: f.techSheetCertificat || 'non',
+                  certificatPhoto: f.techSheetCertificatPhoto || '',
+                  prix: priceVal,
+                  datePrelevement: f.techSheetDatePrelevement || '',
+                  lieuPrelevement: f.techSheetLieuPrelevement || ''
+                };
+                if (idx >= 0) {
+                  sheets[idx] = { ...sheets[idx], ...sheetData };
+                } else {
+                  sheets.push(sheetData as any);
+                }
+                await saveSheets(sheets);
+              } catch (e) {
+                console.error("Error syncing sheets in App.tsx:", e);
+              }
+
               setSelectedPeriod(f.period);
               navigate('period', f.period);
             }}
@@ -1059,10 +1098,14 @@ export default function App() {
               setFossils(newFossils);
               await saveFossils(newFossils);
               
-              const { getSheets, saveSheets } = await import('./store');
-              const sheets = await getSheets();
-              const newSheets = sheets.filter(s => s.id !== fossilId);
-              await saveSheets(newSheets);
+              try {
+                const { getSheets, saveSheets } = await import('./store');
+                const sheets = await getSheets();
+                const newSheets = sheets.filter(s => s.id !== fossilId && s.fossilId !== fossilId);
+                await saveSheets(newSheets);
+              } catch (e) {
+                console.error("Error updating sheets on delete:", e);
+              }
               
               if (selectedPeriod) {
                 navigate('period');
@@ -1104,7 +1147,19 @@ export default function App() {
           />
         </motion.div>
       )}
-      {currentView === 'sheets' && <motion.div key="sheets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><TechnicalSheetsView isLight={isLight} onBack={() => navigate('home')} /></motion.div>}
+      {currentView === 'sheets' && (
+        <motion.div key="sheets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <TechnicalSheetsView 
+            isLight={isLight} 
+            onBack={() => navigate('home')} 
+            fossils={fossils}
+            onUpdateFossils={async (updatedFossils) => {
+              setFossils(updatedFossils);
+              await saveFossils(updatedFossils);
+            }}
+          />
+        </motion.div>
+      )}
       {currentView === 'settings' && <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{renderSettings()}</motion.div>}
       
     </AnimatePresence>

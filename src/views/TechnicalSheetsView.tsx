@@ -9,24 +9,47 @@ import { parseFossilPrice, formatFossilPrice } from '../utils/pricing';
 interface TechnicalSheetsViewProps {
   onBack: () => void;
   isLight?: boolean;
+  fossils?: Fossil[];
+  onUpdateFossils?: (fossils: Fossil[]) => void;
 }
 
-export default function TechnicalSheetsView({ onBack, isLight = false }: TechnicalSheetsViewProps) {
-  const [sheets, setSheets] = useState<TechnicalSheet[]>([]);
+export default function TechnicalSheetsView({ onBack, isLight = false, fossils: fossilsProp, onUpdateFossils }: TechnicalSheetsViewProps) {
+  const [sheets, setSheets] = useState<TechnicalSheet[]>(() => {
+    if (fossilsProp && fossilsProp.length > 0) {
+      return fossilsProp.map(f => ({
+        id: f.id,
+        fossilId: f.id,
+        nom: f.title || 'Sans nom',
+        nomPhoto: f.carouselImage || f.mainImage || '',
+        provenance: f.techSheetProvenance || f.discoveryLocation || '',
+        periode: f.detailedPeriodStart || f.period || '',
+        fossilDating: f.fossilDating || '',
+        typeSheet: f.techSheetType || 'achat',
+        dateAchat: f.techSheetDateAchat || '',
+        lieuAchat: f.techSheetLieuAchat || '',
+        certificat: f.techSheetCertificat || 'non',
+        certificatPhoto: f.techSheetCertificatPhoto || '',
+        prix: parseFossilPrice(f.techSheetPrix),
+        datePrelevement: f.techSheetDatePrelevement || '',
+        lieuPrelevement: f.techSheetLieuPrelevement || f.discoveryLocation || ''
+      }));
+    }
+    return [];
+  });
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Load sheets and sync with fossils seamlessly
   useEffect(() => {
     let isMounted = true;
-    Promise.all([getSheets(), getFossils()]).then(([loadedSheets, loadedFossils]) => {
+    Promise.all([getSheets(), fossilsProp && fossilsProp.length > 0 ? Promise.resolve(fossilsProp) : getFossils()]).then(([loadedSheets, loadedFossils]) => {
       if (!isMounted) return;
 
       const mergedMap = new Map<string, TechnicalSheet>();
 
       // 1. Index existing sheets
-      loadedSheets.forEach((s) => {
+      (loadedSheets || []).forEach((s) => {
         const key = s.fossilId || s.id || s.nom;
         if (key) {
           mergedMap.set(key, { ...s });
@@ -35,7 +58,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
 
       // 2. Ensure each fossil is included in the sheets
       let hasNewFossils = false;
-      loadedFossils.forEach((f: Fossil) => {
+      (loadedFossils || []).forEach((f: Fossil) => {
         const existingKey = f.id && mergedMap.has(f.id) 
           ? f.id 
           : Array.from(mergedMap.keys()).find(k => {
@@ -45,10 +68,20 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
 
         if (existingKey) {
           const item = mergedMap.get(existingKey)!;
-          // Sync missing properties
+          // Sync missing or updated properties
           if (!item.fossilId && f.id) item.fossilId = f.id;
+          if (f.title && !item.nom) item.nom = f.title;
           if (!item.nomPhoto && (f.carouselImage || f.mainImage)) {
             item.nomPhoto = f.carouselImage || f.mainImage;
+          }
+          if (!item.provenance && (f.techSheetProvenance || f.discoveryLocation)) {
+            item.provenance = f.techSheetProvenance || f.discoveryLocation || '';
+          }
+          if (!item.periode && (f.detailedPeriodStart || f.period)) {
+            item.periode = f.detailedPeriodStart || f.period || '';
+          }
+          if (!item.fossilDating && f.fossilDating) {
+            item.fossilDating = f.fossilDating;
           }
           if (parseFossilPrice(item.prix) === 0 && parseFossilPrice(f.techSheetPrix) > 0) {
             item.prix = parseFossilPrice(f.techSheetPrix);
@@ -56,6 +89,10 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
           if (!item.typeSheet && f.techSheetType) {
             item.typeSheet = f.techSheetType;
           }
+          if (!item.dateAchat && f.techSheetDateAchat) item.dateAchat = f.techSheetDateAchat;
+          if (!item.lieuAchat && f.techSheetLieuAchat) item.lieuAchat = f.techSheetLieuAchat;
+          if (!item.datePrelevement && f.techSheetDatePrelevement) item.datePrelevement = f.techSheetDatePrelevement;
+          if (!item.lieuPrelevement && f.techSheetLieuPrelevement) item.lieuPrelevement = f.techSheetLieuPrelevement;
         } else {
           // Add newly discovered fossil to sheets
           const newSheet: TechnicalSheet = {
@@ -63,7 +100,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
             fossilId: f.id,
             nom: f.title || 'Sans nom',
             nomPhoto: f.carouselImage || f.mainImage || '',
-            provenance: f.discoveryLocation || '',
+            provenance: f.techSheetProvenance || f.discoveryLocation || '',
             periode: f.detailedPeriodStart || f.period || '',
             fossilDating: f.fossilDating || '',
             typeSheet: f.techSheetType || 'achat',
@@ -93,7 +130,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
     });
 
     return () => { isMounted = false; };
-  }, []);
+  }, [fossilsProp]);
 
   const save = async (newSheets: TechnicalSheet[]) => {
     setSheets(newSheets);
@@ -130,21 +167,31 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
     try {
       const targetSheet = newSheets.find(s => s.id === id);
       if (targetSheet && (targetSheet.fossilId || targetSheet.nom)) {
-        const fossils = await getFossils();
+        const fossils = fossilsProp || await getFossils();
         const fIdx = fossils.findIndex(f => 
           (targetSheet.fossilId && f.id === targetSheet.fossilId) || 
           (targetSheet.nom && f.title === targetSheet.nom)
         );
         if (fIdx >= 0) {
-          if (field === 'prix') fossils[fIdx].techSheetPrix = finalValue;
-          if (field === 'typeSheet') fossils[fIdx].techSheetType = finalValue;
-          if (field === 'dateAchat') fossils[fIdx].techSheetDateAchat = finalValue;
-          if (field === 'lieuAchat') fossils[fIdx].techSheetLieuAchat = finalValue;
-          if (field === 'datePrelevement') fossils[fIdx].techSheetDatePrelevement = finalValue;
-          if (field === 'lieuPrelevement') fossils[fIdx].techSheetLieuPrelevement = finalValue;
-          if (field === 'certificat') fossils[fIdx].techSheetCertificat = finalValue;
-          if (field === 'certificatPhoto') fossils[fIdx].techSheetCertificatPhoto = finalValue;
-          await saveFossils(fossils);
+          const updatedFossils = [...fossils];
+          const updatedFossil = { ...updatedFossils[fIdx] };
+          if (field === 'prix') updatedFossil.techSheetPrix = finalValue;
+          if (field === 'typeSheet') updatedFossil.techSheetType = finalValue;
+          if (field === 'dateAchat') updatedFossil.techSheetDateAchat = finalValue;
+          if (field === 'lieuAchat') updatedFossil.techSheetLieuAchat = finalValue;
+          if (field === 'datePrelevement') updatedFossil.techSheetDatePrelevement = finalValue;
+          if (field === 'lieuPrelevement') updatedFossil.techSheetLieuPrelevement = finalValue;
+          if (field === 'certificat') updatedFossil.techSheetCertificat = finalValue;
+          if (field === 'certificatPhoto') updatedFossil.techSheetCertificatPhoto = finalValue;
+          if (field === 'nom') updatedFossil.title = finalValue;
+          if (field === 'provenance') updatedFossil.discoveryLocation = finalValue;
+          updatedFossils[fIdx] = updatedFossil;
+          
+          if (onUpdateFossils) {
+            onUpdateFossils(updatedFossils);
+          } else {
+            await saveFossils(updatedFossils);
+          }
         }
       }
     } catch (err) {
@@ -152,17 +199,16 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
     }
   };
 
-  const removeRow = (id: string) => {
-    save(sheets.filter(s => s.id !== id));
+  const removeRow = async (id: string) => {
+    const newSheets = sheets.filter(s => s.id !== id);
+    save(newSheets);
   };
 
-  // Robust calculation of collection total value
+  // Robust calculation of collection total value - sums all prices in the table
   const totalValue = useMemo(() => {
     return sheets.reduce((sum, s) => {
-      // Exclude field discoveries from financial cost
-      if (s.typeSheet === 'prelevement') return sum;
       const p = parseFossilPrice(s.prix);
-      return sum + p;
+      return sum + (isNaN(p) || p <= 0 ? 0 : p);
     }, 0);
   }, [sheets]);
 
@@ -588,30 +634,22 @@ export default function TechnicalSheetsView({ onBack, isLight = false }: Technic
                   {/* 6. Prix (€) */}
                   <td className="py-2.5 px-3 align-top text-right">
                     {isEditing ? (
-                      (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <span className="text-xs italic opacity-40">-</span>
-                      ) : (
-                        <input 
-                          type="text"
-                          inputMode="decimal" 
-                          value={sheet.prix === 0 || sheet.prix === undefined ? '' : sheet.prix} 
-                          onChange={e => update(sheet.id, 'prix', e.target.value)}
-                          placeholder="0 €"
-                          className={`w-20 p-1.5 border rounded-lg outline-none text-right font-serif font-bold text-xs ${
-                            isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
-                          }`}
-                        />
-                      )
+                      <input 
+                        type="text"
+                        inputMode="decimal" 
+                        value={sheet.prix === 0 || sheet.prix === undefined ? '' : sheet.prix} 
+                        onChange={e => update(sheet.id, 'prix', e.target.value)}
+                        placeholder="0 €"
+                        className={`w-20 p-1.5 border rounded-lg outline-none text-right font-serif font-bold text-xs ${
+                          isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A] border-[#D4AF37]/30 text-white focus:border-[#D4AF37]'
+                        }`}
+                      />
                     ) : (
-                      (sheet.typeSheet || 'achat') === 'prelevement' ? (
-                        <span className="text-xs italic opacity-40 font-serif">-</span>
-                      ) : (
-                        <span className={`font-serif italic font-bold text-xs sm:text-sm ${
-                          isLight ? 'text-black' : 'text-[#D4AF37]'
-                        }`}>
-                          {parseFossilPrice(sheet.prix) > 0 ? `${formatFossilPrice(sheet.prix)} €` : '-'}
-                        </span>
-                      )
+                      <span className={`font-serif italic font-bold text-xs sm:text-sm ${
+                        isLight ? 'text-black' : 'text-[#D4AF37]'
+                      }`}>
+                        {parseFossilPrice(sheet.prix) > 0 ? `${formatFossilPrice(sheet.prix)} €` : '-'}
+                      </span>
                     )}
                   </td>
 
