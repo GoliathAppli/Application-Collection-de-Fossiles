@@ -853,7 +853,11 @@ export default function App() {
   };
 
   const renderPeriod = () => {
-    const periodFossils = fossils.filter(f => f.period === selectedPeriod);
+    const periodFossils = fossils.filter(f => {
+      if (f.period === selectedPeriod) return true;
+      if (f.detailedPeriodStart === selectedPeriod || f.detailedPeriodEnd === selectedPeriod) return true;
+      return false;
+    });
     
     return (
       <div className={`flex flex-col min-h-screen bg-texture relative overflow-hidden transition-colors duration-300 ${isLight ? 'bg-[#F7F5F0] text-black' : 'bg-[#060B1A] text-white'}`}>

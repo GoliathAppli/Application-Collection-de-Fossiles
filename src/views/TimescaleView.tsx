@@ -17,7 +17,8 @@ import {
   Eye
 } from 'lucide-react';
 import { Fossil, Period } from '../types';
-import { geologicalEras, subPeriodsDetails } from '../geology';
+import { geologicalEras, subPeriodsDetails, allSubPeriods } from '../geology';
+import { calculateFossilClassification } from '../utils/dating';
 
 interface TimescaleViewProps {
   fossils: Fossil[];
@@ -27,19 +28,62 @@ interface TimescaleViewProps {
   isLight?: boolean;
 }
 
+export function getFossilSubPeriod(fossil: Fossil): string {
+  // 1. If detailedPeriodStart is a known subperiod
+  if (fossil.detailedPeriodStart && allSubPeriods.includes(fossil.detailedPeriodStart)) {
+    return fossil.detailedPeriodStart;
+  }
+  // 2. If period itself is a subperiod
+  if (fossil.period && allSubPeriods.includes(fossil.period)) {
+    return fossil.period;
+  }
+  // 3. If datingValue/datingUnit exists, calculate using calculateFossilClassification
+  if (fossil.datingValue) {
+    const classification = calculateFossilClassification(
+      fossil.datingUnit || 'Ma',
+      fossil.datingValue,
+      fossil.detailedPeriodStart || 'Jurassique',
+      fossil.detailedPeriodEnd
+    );
+    if (classification && classification.subPeriod) {
+      return classification.subPeriod;
+    }
+  }
+  // 4. Fallback based on era
+  if (fossil.period === 'Precambrien') return 'Précambrien';
+  if (fossil.period === 'Paléozoïque') return 'Cambrien';
+  if (fossil.period === 'Mésozoïque') return 'Jurassique';
+  if (fossil.period === 'Cénozoïque') return 'Quaternaire';
+
+  return 'Jurassique';
+}
+
+export function getFossilEra(fossil: Fossil): string {
+  if (fossil.period && ['Precambrien', 'Paléozoïque', 'Mésozoïque', 'Cénozoïque'].includes(fossil.period)) {
+    return fossil.period;
+  }
+  const sub = getFossilSubPeriod(fossil);
+  const era = geologicalEras.find(e => e.subPeriods.includes(sub));
+  return era ? era.name : 'Mésozoïque';
+}
+
 export default function TimescaleView({ fossils, onBack, onNavigateToPeriod, onEditFossil, isLight = false }: TimescaleViewProps) {
   const [selectedEra, setSelectedEra] = useState<string | 'all'>('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // default: newest to oldest (desc)
   const [activeTab, setActiveTab] = useState<'timeline' | 'dashboard'>('timeline');
   const [selectedSubPeriod, setSelectedSubPeriod] = useState<string | null>(null);
 
-  // Group fossils by period for stats and lists
+  // Group fossils by sub-period for stats and lists
   const fossilsByPeriod = useMemo(() => {
     const map: Record<string, Fossil[]> = {};
+    allSubPeriods.forEach(sub => {
+      map[sub] = [];
+    });
+
     fossils.forEach(fossil => {
-      const periodName = fossil.period;
-      if (!map[periodName]) map[periodName] = [];
-      map[periodName].push(fossil);
+      const subPeriodName = getFossilSubPeriod(fossil);
+      if (!map[subPeriodName]) map[subPeriodName] = [];
+      map[subPeriodName].push(fossil);
     });
     return map;
   }, [fossils]);
@@ -79,9 +123,9 @@ export default function TimescaleView({ fossils, onBack, onNavigateToPeriod, onE
     };
 
     fossils.forEach(f => {
-      const era = geologicalEras.find(e => e.subPeriods.includes(f.period));
-      if (era) {
-        eraCounts[era.name] = (eraCounts[era.name] || 0) + 1;
+      const eraName = getFossilEra(f);
+      if (eraCounts[eraName] !== undefined) {
+        eraCounts[eraName]++;
       }
     });
 
@@ -90,6 +134,7 @@ export default function TimescaleView({ fossils, onBack, onNavigateToPeriod, onE
     Object.entries(eraCounts).forEach(([name, count]) => {
       if (count > maxVal) {
         maxVal = count;
+        maxEra = name;
       }
     });
 
@@ -273,7 +318,7 @@ export default function TimescaleView({ fossils, onBack, onNavigateToPeriod, onE
               </button>
               
               {geologicalEras.map(era => {
-                const eraFossilsCount = fossils.filter(f => era.subPeriods.includes(f.period)).length;
+                const eraFossilsCount = fossils.filter(f => getFossilEra(f) === era.name).length;
                 const isSelected = selectedEra === era.name;
                 return (
                   <button 
@@ -362,7 +407,7 @@ export default function TimescaleView({ fossils, onBack, onNavigateToPeriod, onE
                           </button>
 
                           <button 
-                            onClick={() => onNavigateToPeriod(subItem.name as Period)}
+                            onClick={() => onNavigateToPeriod(subItem.eraName as Period)}
                             className={`px-3.5 py-2.5 rounded-xl text-xs font-serif tracking-wider uppercase font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${hasFossils ? (isLight ? 'bg-black text-white hover:bg-slate-800 shadow-sm' : 'bg-[#D4AF37] text-[#060B1A] hover:bg-[#FFD700]') : (isLight ? 'bg-slate-100 text-black border border-slate-300 hover:bg-slate-200' : 'bg-[#060B1A]/40 text-slate-400 border border-white/5 hover:border-[#D4AF37]/30 hover:text-white')}`}
                           >
                             <Eye size={13} className="shrink-0" />
