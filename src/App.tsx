@@ -183,12 +183,25 @@ export default function App() {
         return;
       }
       const handle = await (window as any).showDirectoryPicker();
-      const { saveDirectoryHandle } = await import('./store');
-      await saveDirectoryHandle(handle);
+      
+      // Ensure readwrite permission
+      if (typeof handle.requestPermission === 'function') {
+        try {
+          await handle.requestPermission({ mode: 'readwrite' });
+        } catch {
+          // ignore
+        }
+      }
+
+      const { saveDirectoryHandle, getSheets, getHomeImage } = await import('./store');
+      const currentSheets = await getSheets();
+      const currentBanner = bannerImage || await getHomeImage();
+      // Pass all active state data (including all previous changes before linking) to write immediately
+      await saveDirectoryHandle(handle, fossils, currentSheets, currentBanner);
       setDirHandle(handle);
       setDirPermissionGranted(true);
-      setDirSyncStatus("✅ Dossier local synchronisé ! Les fichiers seront mis à jour automatiquement à chaque modification.");
-      setTimeout(() => setDirSyncStatus(null), 5000);
+      setDirSyncStatus("✅ Dossier local synchronisé ! Toutes vos modifications (y compris antérieures) ont été enregistrées.");
+      setTimeout(() => setDirSyncStatus(null), 6000);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error(err);
@@ -203,12 +216,14 @@ export default function App() {
       const permission = await dirHandle.requestPermission({ mode: 'readwrite' });
       if (permission === 'granted') {
         setDirPermissionGranted(true);
-        const { syncToLocalDirectory } = await import('./store');
-        const success = await syncToLocalDirectory();
+        const { syncToLocalDirectory, getSheets, getHomeImage } = await import('./store');
+        const currentSheets = await getSheets();
+        const currentBanner = bannerImage || await getHomeImage();
+        const success = await syncToLocalDirectory(fossils, currentSheets, currentBanner, dirHandle);
         if (success) {
-          setDirSyncStatus("✅ Connexion restaurée et fichiers synchronisés !");
+          setDirSyncStatus("✅ Connexion restaurée et fichiers synchronisés avec succès !");
         } else {
-          setDirSyncStatus("⚠️ Dossier connecté mais échec de la synchronisation.");
+          setDirSyncStatus("⚠️ Dossier connecté mais échec de l'écriture.");
         }
         setTimeout(() => setDirSyncStatus(null), 5000);
       } else {
@@ -477,13 +492,13 @@ export default function App() {
         <div className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col gap-8 pt-2">
           
           {/* Decorative dynamic spinning Ammonite on Home dashboard above periods */}
-          <div className="flex flex-col items-center justify-center text-center py-4">
+          <div className="flex flex-col items-center justify-center text-center py-2">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
-              className={`mb-3 filter ${isLight ? 'text-black drop-shadow-[0_0_8px_rgba(0,0,0,0.15)]' : 'text-[#D4AF37] drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]'}`}
+              className={`mb-2 filter ${isLight ? 'text-black drop-shadow-[0_0_8px_rgba(0,0,0,0.15)]' : 'text-[#D4AF37] drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]'}`}
             >
-              <AmmoniteIcon size={72} />
+              <AmmoniteIcon size={64} />
             </motion.div>
             <h1 className={`text-3xl md:text-5xl font-serif font-bold tracking-widest uppercase mb-1 drop-shadow-md ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
               Ma Collection
@@ -492,8 +507,30 @@ export default function App() {
               de Fossiles
             </p>
           </div>
+
+          {/* Primary Action Button: Ajouter un fossile */}
+          <div className="w-full flex justify-center mt-1">
+            <button
+              onClick={() => {
+                setEditingFossil(null);
+                navigate('form');
+              }}
+              className={`w-full max-w-md py-4 px-6 rounded-2xl border-2 font-serif uppercase tracking-widest text-sm sm:text-base font-bold shadow-xl flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer group animate-fade-in ${
+                isLight
+                  ? 'bg-black text-white border-black hover:bg-slate-800 shadow-slate-300'
+                  : 'bg-[#D4AF37] text-[#060B1A] border-[#FFD700] hover:bg-[#FFD700] shadow-[#D4AF37]/25'
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl transition-transform group-hover:rotate-90 duration-300 ${
+                isLight ? 'bg-white/20 text-white' : 'bg-black/15 text-[#060B1A]'
+              }`}>
+                <Plus size={22} strokeWidth={2.5} />
+              </div>
+              <span>Ajouter un fossile</span>
+            </button>
+          </div>
           
-          <div className="grid grid-cols-2 gap-4 md:gap-6 mt-2">
+          <div className="grid grid-cols-2 gap-4 md:gap-6 mt-1">
             <button onClick={() => navigate('period', 'Precambrien')} className={`flex flex-col items-center justify-center p-4 md:p-8 rounded-2xl shadow-lg hover:-translate-y-1 transition-all duration-300 group animate-fade-in delay-100 ${isLight ? 'bg-white text-black border-2 border-slate-200 hover:bg-slate-50 hover:border-black' : 'bg-[#101A36]/80 text-white border-2 border-[#D4AF37]/20 hover:bg-[#18264F]/90 hover:border-[#D4AF37]/60'}`}>
               <Dna className={`w-10 h-10 md:w-12 md:h-12 mb-2 group-hover:scale-125 duration-500 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`} opacity={0.9} />
               <span className={`font-serif text-sm sm:text-xl font-bold tracking-widest uppercase text-center ${isLight ? 'text-black group-hover:text-slate-700' : 'text-white group-hover:text-[#D4AF37]'}`}>Précambrien</span>
@@ -840,7 +877,24 @@ export default function App() {
         </div>
         
         <div className="flex-1 p-4 md:p-8 flex flex-col items-center relative z-0">
-          {periodViewMode === 'scroll' ? (
+          {periodFossils.length === 0 ? (
+            <div className={`my-auto p-8 max-w-md text-center border-2 rounded-2xl ${
+              isLight ? 'bg-white/80 border-slate-200 text-slate-700' : 'bg-[#101A36]/60 border-[#D4AF37]/20 text-slate-300'
+            }`}>
+              <p className="font-serif text-lg mb-2 font-bold">Aucun fossile dans cette période</p>
+              <p className="text-xs font-sans opacity-80 mb-6">
+                Utilisez le bouton « Ajouter un fossile » sur l'écran d'accueil pour répertorier un nouveau spécimen.
+              </p>
+              <button
+                onClick={() => navigate('home')}
+                className={`px-5 py-2.5 rounded-xl border text-xs font-serif uppercase tracking-wider font-bold transition-all ${
+                  isLight ? 'bg-black text-white hover:bg-slate-800' : 'bg-[#D4AF37] text-[#060B1A] hover:bg-[#FFD700]'
+                }`}
+              >
+                Retour à l'accueil
+              </button>
+            </div>
+          ) : periodViewMode === 'scroll' ? (
             <div className="flex overflow-x-auto snap-x snap-mandatory gap-8 pb-8 flex-1 items-center w-full max-w-6xl px-4 scrollbar-hide">
               {periodFossils.map((fossil, index) => (
                 <div key={fossil.id} className={`snap-center shrink-0 w-[75vw] sm:w-72 h-[26rem] sm:h-[30rem] border-2 rounded-2xl overflow-hidden shadow-2xl relative cursor-pointer group hover:-translate-y-1 transition-all duration-300 animate-fade-in flex flex-col ${
@@ -865,18 +919,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              
-              <div className={`snap-center shrink-0 w-[75vw] sm:w-72 h-[26rem] sm:h-[30rem] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all hover:-translate-y-1 group animate-fade-in delay-300 ${
-                isLight ? 'bg-white/60 border-slate-300 hover:border-black hover:bg-white' : 'bg-[#101A36]/40 border-[#D4AF37]/20 hover:border-[#D4AF37]/60 hover:bg-[#101A36]/80'
-              }`} onClick={() => {
-                setEditingFossil(null);
-                navigate('form');
-              }}>
-                <div className={`p-4 mb-4 transform group-hover:scale-110 transition-transform ${isLight ? 'text-black' : 'text-[#D4AF37] filter drop-shadow-[0_0_4px_rgba(212,175,55,0.2)]'}`}>
-                  <Plus size={48} strokeWidth={1} />
-                </div>
-                <span className={`text-xl font-serif italic transition-colors text-center px-4 font-bold ${isLight ? 'text-slate-700 group-hover:text-black' : 'text-slate-300 group-hover:text-white'}`}>Ajouter un fossile</span>
-              </div>
             </div>
           ) : (
             <div className="w-full max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8 overflow-y-auto pb-16">
@@ -903,18 +945,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              
-              <div className={`border-2 border-dashed rounded-2xl flex flex-col h-64 md:h-72 items-center justify-center cursor-pointer transition-all hover:-translate-y-1 group ${
-                isLight ? 'bg-white/60 border-slate-300 hover:border-black hover:bg-white' : 'bg-[#101A36]/40 border-[#D4AF37]/20 hover:border-[#D4AF37]/60 hover:bg-[#101A36]/80'
-              }`} onClick={() => {
-                setEditingFossil(null);
-                navigate('form');
-              }}>
-                <div className={`p-4 mb-2 transform group-hover:scale-110 transition-transform ${isLight ? 'text-black' : 'text-[#D4AF37] filter drop-shadow-[0_0_4px_rgba(212,175,55,0.2)]'}`}>
-                  <Plus size={32} strokeWidth={1} />
-                </div>
-                <span className={`text-sm md:text-base font-serif italic transition-colors text-center px-4 font-bold ${isLight ? 'text-slate-700 group-hover:text-black' : 'text-slate-300 group-hover:text-white'}`}>Ajouter un fossile</span>
-              </div>
             </div>
           )}
           
@@ -940,14 +970,21 @@ export default function App() {
         {currentView === 'form' && (
         <motion.div key="form" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
           <FossilFormView 
-            onBack={() => navigate('period')} 
+            onBack={() => {
+              if (selectedPeriod) {
+                navigate('period');
+              } else {
+                navigate('home');
+              }
+            }} 
             onHome={() => navigate('home')}
             isLight={isLight}
             onSave={async (f) => {
               const newFossils = editingFossil ? fossils.map(x => x.id === f.id ? f : x) : [...fossils, f];
               setFossils(newFossils);
               await saveFossils(newFossils);
-              navigate('period');
+              setSelectedPeriod(f.period);
+              navigate('period', f.period);
             }}
             onDelete={async (fossilId) => {
               const newFossils = fossils.filter(x => x.id !== fossilId);
@@ -959,9 +996,13 @@ export default function App() {
               const newSheets = sheets.filter(s => s.id !== fossilId);
               await saveSheets(newSheets);
               
-              navigate('period');
+              if (selectedPeriod) {
+                navigate('period');
+              } else {
+                navigate('home');
+              }
             }}
-            period={selectedPeriod!}
+            period={selectedPeriod || 'Mésozoïque'}
             existingFossil={editingFossil}
           />
         </motion.div>

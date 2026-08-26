@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Fossil, Period, TechnicalSheet } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Fossil, Period, TechnicalSheet, DatingUnit } from '../types';
 import ImageUpload from '../components/ImageUpload';
 import { ChevronLeft, Home, Printer, Plus, Trash2, Edit2, Info, ArrowLeft, Save, Eye, Sparkles, Calendar, Compass, Clock, BookOpen, Layers } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { geologicalEras, allSubPeriods, subPeriodsDetails } from '../geology';
+import { calculateFossilClassification, formatFossilDatingString } from '../utils/dating';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -129,6 +130,36 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
     });
   }, [fossil.id]);
 
+  const [datingUnit, setDatingUnit] = useState<DatingUnit>(() => {
+    if (existingFossil?.datingUnit) return existingFossil.datingUnit;
+    if (existingFossil?.fossilDating?.toLowerCase().includes('inconnue')) return 'unknown';
+    if (existingFossil?.fossilDating?.toLowerCase().includes('mille') || existingFossil?.fossilDating?.toLowerCase().includes('ka')) return 'ka';
+    return 'Ma';
+  });
+
+  const [datingValue, setDatingValue] = useState<string>(() => {
+    if (existingFossil?.datingValue !== undefined && existingFossil.datingValue !== '') return existingFossil.datingValue;
+    if (existingFossil?.fossilDating) {
+      const numMatch = existingFossil.fossilDating.match(/([0-9]+([.,][0-9]+)?)/);
+      if (numMatch) return numMatch[0].replace(',', '.');
+    }
+    return '';
+  });
+
+  const [datingPrecision, setDatingPrecision] = useState<string>(() => {
+    return existingFossil?.datingPrecision || '';
+  });
+
+  // Calculate live geological classification according to user rules
+  const classification = useMemo(() => {
+    return calculateFossilClassification(
+      datingUnit,
+      datingValue,
+      fossil.detailedPeriodStart || 'Jurassique',
+      fossil.detailedPeriodEnd || ''
+    );
+  }, [datingUnit, datingValue, fossil.detailedPeriodStart, fossil.detailedPeriodEnd]);
+
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [showPeriodInfo, setShowPeriodInfo] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -191,20 +222,48 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
   };
 
   const handleSave = async () => {
-    onSave(fossil);
+    // Determine accurate formatted string and subperiods
+    const computedDatingString = formatFossilDatingString(
+      datingUnit,
+      datingValue,
+      datingPrecision,
+      fossil.detailedPeriodStart || classification.subPeriod,
+      fossil.detailedPeriodEnd || ''
+    );
+
+    const determinedStart = (datingUnit !== 'unknown' && datingValue.trim() !== '')
+      ? classification.subPeriod
+      : (fossil.detailedPeriodStart || classification.subPeriod);
+
+    const determinedEnd = (datingUnit !== 'unknown' && datingValue.trim() !== '')
+      ? classification.subPeriod
+      : (fossil.detailedPeriodEnd || determinedStart);
+
+    const updatedFossil: Fossil = {
+      ...fossil,
+      period: classification.period,
+      detailedPeriodStart: determinedStart,
+      detailedPeriodEnd: determinedEnd,
+      datingUnit,
+      datingValue,
+      datingPrecision,
+      fossilDating: computedDatingString
+    };
+
+    onSave(updatedFossil);
     
     // Save or update technical sheet
     const sheets = await getSheets();
-    const existingIndex = sheets.findIndex(s => s.fossilId === fossil.id || (fossil.title && s.nom === fossil.title));
+    const existingIndex = sheets.findIndex(s => s.fossilId === updatedFossil.id || (updatedFossil.title && s.nom === updatedFossil.title));
     
     const updatedSheet: TechnicalSheet = {
       ...techSheet,
-      fossilId: fossil.id,
-      nom: fossil.title,
-      nomPhoto: fossil.carouselImage || fossil.mainImage || techSheet.nomPhoto,
-      provenance: fossil.discoveryLocation || techSheet.provenance,
-      periode: fossil.period || techSheet.periode,
-      fossilDating: fossil.fossilDating || techSheet.fossilDating,
+      fossilId: updatedFossil.id,
+      nom: updatedFossil.title,
+      nomPhoto: updatedFossil.carouselImage || updatedFossil.mainImage || techSheet.nomPhoto,
+      provenance: updatedFossil.discoveryLocation || techSheet.provenance,
+      periode: updatedFossil.period,
+      fossilDating: computedDatingString,
       typeSheet: techSheet.typeSheet || 'achat'
     };
 
@@ -214,6 +273,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       sheets.push(updatedSheet);
     }
     await saveSheets(sheets);
+    setFossil(updatedFossil);
     setIsEditing(false);
   };
 
@@ -280,52 +340,224 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
         </div>
       </div>
 
-      {/* Stratigraphic Period Selection */}
+      {/* Stratigraphic Period Selection & Dating */}
       <div className={`border p-6 md:p-8 rounded-3xl shadow-xl transition-colors ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/25 text-white'}`}>
-        <h3 className={`text-lg md:text-xl font-serif font-bold mb-6 uppercase tracking-widest border-b pb-2 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Période Géologique & Datation</h3>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Période géologique (Début)</label>
-            <select
-              value={fossil.detailedPeriodStart || fossil.period}
-              onChange={e => {
-                const val = e.target.value as Period;
-                update('detailedPeriodStart', val);
-                update('period', val);
-                if (!fossil.detailedPeriodEnd) update('detailedPeriodEnd', val);
-              }}
-              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
-            >
-              {allSubPeriods.map(sub => (
-                <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 mb-6">
+          <h3 className={`text-lg md:text-xl font-serif font-bold uppercase tracking-widest ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
+            Datation & Classification Géologique
+          </h3>
+          <span className={`text-[11px] font-mono font-bold px-2.5 py-1 rounded-full border self-start sm:self-auto ${isLight ? 'bg-slate-100 border-slate-300 text-black' : 'bg-[#D4AF37]/15 border-[#D4AF37]/30 text-[#D4AF37]'}`}>
+            ⚡ Classement automatique
+          </span>
+        </div>
 
-          <div>
-            <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Période géologique (Fin - Optionnelle)</label>
-            <select
-              value={fossil.detailedPeriodEnd || fossil.detailedPeriodStart || fossil.period}
-              onChange={e => update('detailedPeriodEnd', e.target.value as Period)}
-              className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
+        {/* Dating Type Selection: Ma, ka, unknown */}
+        <div className="mb-6">
+          <label className={`block text-xs font-serif uppercase tracking-widest font-bold mb-3 ${isLight ? 'text-black' : 'text-slate-300'}`}>
+            Type de datation du spécimen :
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setDatingUnit('Ma')}
+              className={`flex items-center gap-3 p-3.5 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
+                datingUnit === 'Ma'
+                  ? (isLight ? 'bg-black text-white border-black shadow-md font-bold' : 'bg-[#D4AF37] text-[#060B1A] border-[#FFD700] shadow-md font-bold')
+                  : (isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-black' : 'bg-[#060B1A]/80 hover:bg-[#101A36] border-[#D4AF37]/25 text-slate-200')
+              }`}
             >
-              {allSubPeriods.map(sub => (
-                <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
-              ))}
-            </select>
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                datingUnit === 'Ma' ? (isLight ? 'border-white bg-white' : 'border-[#060B1A] bg-[#060B1A]') : 'border-current'
+              }`}>
+                {datingUnit === 'Ma' && <div className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-black' : 'bg-[#D4AF37]'}`} />}
+              </div>
+              <div>
+                <div className="text-xs font-serif uppercase tracking-wider">Millions d'années (Ma)</div>
+                <div className={`text-[10px] font-sans opacity-80 ${datingUnit === 'Ma' ? '' : 'text-slate-400'}`}>Datation exacte en Ma</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDatingUnit('ka')}
+              className={`flex items-center gap-3 p-3.5 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
+                datingUnit === 'ka'
+                  ? (isLight ? 'bg-black text-white border-black shadow-md font-bold' : 'bg-[#D4AF37] text-[#060B1A] border-[#FFD700] shadow-md font-bold')
+                  : (isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-black' : 'bg-[#060B1A]/80 hover:bg-[#101A36] border-[#D4AF37]/25 text-slate-200')
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                datingUnit === 'ka' ? (isLight ? 'border-white bg-white' : 'border-[#060B1A] bg-[#060B1A]') : 'border-current'
+              }`}>
+                {datingUnit === 'ka' && <div className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-black' : 'bg-[#D4AF37]'}`} />}
+              </div>
+              <div>
+                <div className="text-xs font-serif uppercase tracking-wider">Mille ans (ka / ans)</div>
+                <div className={`text-[10px] font-sans opacity-80 ${datingUnit === 'ka' ? '' : 'text-slate-400'}`}>Fossiles récents & quaternaires</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDatingUnit('unknown')}
+              className={`flex items-center gap-3 p-3.5 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
+                datingUnit === 'unknown'
+                  ? (isLight ? 'bg-black text-white border-black shadow-md font-bold' : 'bg-[#D4AF37] text-[#060B1A] border-[#FFD700] shadow-md font-bold')
+                  : (isLight ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-black' : 'bg-[#060B1A]/80 hover:bg-[#101A36] border-[#D4AF37]/25 text-slate-200')
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                datingUnit === 'unknown' ? (isLight ? 'border-white bg-white' : 'border-[#060B1A] bg-[#060B1A]') : 'border-current'
+              }`}>
+                {datingUnit === 'unknown' && <div className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-black' : 'bg-[#D4AF37]'}`} />}
+              </div>
+              <div>
+                <div className="text-xs font-serif uppercase tracking-wider">Datation inconnue</div>
+                <div className={`text-[10px] font-sans opacity-80 ${datingUnit === 'unknown' ? '' : 'text-slate-400'}`}>Selon le règne de l'espèce</div>
+              </div>
+            </button>
           </div>
         </div>
 
-        <div>
-          <label className={`block text-sm font-serif mb-2 uppercase tracking-widest font-semibold ${isLight ? 'text-black' : 'text-slate-300'}`}>Datation exacte ou estimation d'âge</label>
-          <input
-            type="text"
-            value={fossil.fossilDating || ''}
-            onChange={e => update('fossilDating', e.target.value)}
-            className={`w-full p-4 border rounded-xl font-sans outline-none ${isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'}`}
-            placeholder="Ex: ~180 Millions d'années (Toarcien inférieur)"
-          />
+        {/* Input fields based on selection */}
+        {datingUnit !== 'unknown' ? (
+          <div className="space-y-4 mb-6 animate-fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-xs font-serif uppercase tracking-widest font-bold mb-2 ${isLight ? 'text-black' : 'text-slate-300'}`}>
+                  {datingUnit === 'Ma' ? "Âge estimé (en Millions d'années)" : "Âge estimé (en milliers d'années)"}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={datingValue}
+                    onChange={e => setDatingValue(e.target.value)}
+                    className={`w-full p-4 pr-24 border rounded-xl font-sans outline-none text-base font-bold ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'
+                    }`}
+                    placeholder={datingUnit === 'Ma' ? "Ex: 180 ou 66" : "Ex: 15 ou 15 000"}
+                  />
+                  <span className={`absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono font-black uppercase pointer-events-none px-2 py-1 rounded ${
+                    isLight ? 'bg-slate-200 text-black' : 'bg-[#D4AF37]/20 text-[#D4AF37]'
+                  }`}>
+                    {datingUnit === 'Ma' ? 'Ma' : 'ka'}
+                  </span>
+                </div>
+                <p className={`text-[11px] font-sans mt-1.5 ${isLight ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>
+                  {datingUnit === 'Ma'
+                    ? "Exemples : 66 (Crétacé), 180 (Jurassique), 250 (Trias), 500 (Cambrien)..."
+                    : "Exemples : 15 (15 000 ans ➔ Quaternaire), 120 (120 000 ans)..."}
+                </p>
+              </div>
+
+              <div>
+                <label className={`block text-xs font-serif uppercase tracking-widest font-bold mb-2 ${isLight ? 'text-black' : 'text-slate-300'}`}>
+                  Précision stratigraphique / Étage (Optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={datingPrecision}
+                  onChange={e => setDatingPrecision(e.target.value)}
+                  className={`w-full p-4 border rounded-xl font-sans outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'
+                  }`}
+                  placeholder="Ex: Toarcien inférieur, Hettangien, etc."
+                />
+                <p className={`text-[11px] font-sans mt-1.5 ${isLight ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>
+                  Niveau d'étage géologique ou contexte géologique précis.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 mb-6 animate-fade-in">
+            <div className={`p-4 rounded-xl border mb-4 text-xs leading-relaxed ${
+              isLight ? 'bg-slate-100 border-slate-300 text-black' : 'bg-[#060B1A]/80 border-[#D4AF37]/20 text-slate-300'
+            }`}>
+              <p className="font-bold flex items-center gap-1.5 mb-1">
+                <Info size={14} className={isLight ? 'text-black' : 'text-[#D4AF37]'} />
+                Règle de classement lorsque la date exacte est inconnue :
+              </p>
+              <p>
+                Le fossile est automatiquement classé selon la période de vie de l'organisme. S'il a vécu à cheval sur plusieurs époques, il sera classé sur la <strong>période du début de son règne</strong>.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={`block text-xs font-serif uppercase tracking-widest font-bold mb-2 ${isLight ? 'text-black' : 'text-slate-300'}`}>
+                  Période d'apparition / Début du règne
+                </label>
+                <select
+                  value={fossil.detailedPeriodStart || 'Jurassique'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    update('detailedPeriodStart', val);
+                    if (!fossil.detailedPeriodEnd) update('detailedPeriodEnd', val);
+                  }}
+                  className={`w-full p-4 border rounded-xl font-sans outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'
+                  }`}
+                >
+                  {allSubPeriods.map(sub => (
+                    <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={`block text-xs font-serif uppercase tracking-widest font-bold mb-2 ${isLight ? 'text-black' : 'text-slate-300'}`}>
+                  Fin du règne de l'espèce (Optionnelle)
+                </label>
+                <select
+                  value={fossil.detailedPeriodEnd || fossil.detailedPeriodStart || 'Jurassique'}
+                  onChange={e => update('detailedPeriodEnd', e.target.value)}
+                  className={`w-full p-4 border rounded-xl font-sans outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-black focus:border-black' : 'bg-[#060B1A]/70 border-[#D4AF37]/25 text-white focus:border-[#D4AF37]'
+                  }`}
+                >
+                  {allSubPeriods.map(sub => (
+                    <option key={sub} value={sub} className={isLight ? 'bg-white text-black' : 'bg-[#060B1A] text-white'}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic live explanatory banner / box */}
+        <div className={`p-4 md:p-5 rounded-2xl border-2 transition-all flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+          isLight
+            ? 'bg-amber-50/90 border-amber-300 text-black shadow-sm'
+            : 'bg-[#0b1329] border-[#D4AF37]/50 text-white shadow-xl'
+        }`}>
+          <div className={`p-3 rounded-2xl shrink-0 ${
+            isLight ? 'bg-amber-200/90 text-black' : 'bg-[#D4AF37]/20 text-[#D4AF37]'
+          }`}>
+            <Compass size={26} />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[10px] font-serif uppercase tracking-widest font-black px-2.5 py-0.5 rounded-full border ${
+                isLight ? 'bg-white border-amber-300 text-black' : 'bg-[#060B1A] border-[#D4AF37]/40 text-[#D4AF37]'
+              }`}>
+                📍 Destination dans la collection
+              </span>
+              <span className={`font-serif font-black text-xs sm:text-sm uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
+                isLight ? 'bg-black text-white' : 'bg-[#D4AF37] text-[#060B1A]'
+              }`}>
+                Ère {classification.period}
+              </span>
+              <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded-lg ${
+                isLight ? 'bg-amber-200/80 text-black' : 'bg-white/10 text-slate-200'
+              }`}>
+                {classification.subPeriod}
+              </span>
+            </div>
+            <p className={`text-xs sm:text-sm font-sans leading-relaxed ${isLight ? 'text-slate-900 font-medium' : 'text-slate-200'}`}>
+              {classification.explanation}
+            </p>
+          </div>
         </div>
       </div>
 

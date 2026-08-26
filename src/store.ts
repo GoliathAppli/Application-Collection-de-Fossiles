@@ -82,9 +82,18 @@ export async function importData(json: string) {
 }
 
 // Directory handle storage and auto-sync methods
-export async function saveDirectoryHandle(handle: any) {
+export async function saveDirectoryHandle(handle: any, directFossils?: Fossil[], directSheets?: TechnicalSheet[], directHomeImage?: string) {
   await fossilStore.setItem('localDirectoryHandle', handle);
-  await syncToLocalDirectory();
+  
+  const currentFossils = (directFossils && directFossils.length > 0) ? directFossils : await getFossils();
+  const currentSheets = (directSheets && directSheets.length > 0) ? directSheets : await getSheets();
+  const currentHomeImage = directHomeImage !== undefined ? directHomeImage : await getHomeImage();
+  
+  await fossilStore.setItem('fossilList', currentFossils);
+  await sheetStore.setItem('sheetList', currentSheets);
+  await fossilStore.setItem('homeImage', currentHomeImage);
+  
+  return await syncToLocalDirectory(currentFossils, currentSheets, currentHomeImage, handle);
 }
 
 export async function getDirectoryHandle() {
@@ -112,23 +121,35 @@ export async function saveAutoOpenSetting(enabled: boolean) {
   await fossilStore.setItem('autoOpenLastFossil', enabled);
 }
 
-export async function syncToLocalDirectory(): Promise<boolean> {
+export async function syncToLocalDirectory(
+  directFossils?: Fossil[],
+  directSheets?: TechnicalSheet[],
+  directHomeImage?: string,
+  directHandle?: any
+): Promise<boolean> {
   try {
-    const handle = await getDirectoryHandle();
+    const handle = directHandle || await getDirectoryHandle();
     if (!handle) return false;
 
-    // Verify permission
-    const options = { mode: 'readwrite' };
-    const queryResult = await handle.queryPermission(options);
-    if (queryResult !== 'granted') {
-      // If we cannot request or are not in a gesture context, return false.
-      // The user will see a banner to click and re-grant if necessary.
-      return false;
+    // Verify or request permission
+    try {
+      const options = { mode: 'readwrite' };
+      let permission = await handle.queryPermission(options);
+      if (permission !== 'granted') {
+        if (typeof handle.requestPermission === 'function') {
+          permission = await handle.requestPermission(options);
+        }
+      }
+      if (permission !== 'granted') {
+        return false;
+      }
+    } catch {
+      // Ignore queryPermission errors in non-standard environments
     }
 
-    const fossils = await fossilStore.getItem<Fossil[]>('fossilList') || [];
-    const sheets = await sheetStore.getItem<TechnicalSheet[]>('sheetList') || [];
-    const homeImage = await fossilStore.getItem<string>('homeImage') || '';
+    const fossils = (directFossils && directFossils.length > 0) ? directFossils : await getFossils();
+    const sheets = (directSheets && directSheets.length > 0) ? directSheets : await getSheets();
+    const homeImage = directHomeImage !== undefined ? directHomeImage : await getHomeImage();
 
     // Write full backup JSON
     const backupData = JSON.stringify({ fossils, sheets, homeImage }, null, 2);
@@ -158,7 +179,7 @@ export async function syncToLocalDirectory(): Promise<boolean> {
         txtContent += `\nDescription :\n${f.description}\n`;
       }
       
-      const sheet = sheets.find(s => s.id === f.id);
+      const sheet = sheets.find(s => s.id === f.id || (f.title && s.nom === f.title));
       if (sheet) {
         txtContent += `\n--- Détails de la Fiche Technique ---\n`;
         if (sheet.dateAchat) txtContent += `  * Date d'achat : ${sheet.dateAchat}\n`;

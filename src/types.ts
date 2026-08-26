@@ -1,10 +1,14 @@
 export type Period = 'Precambrien' | 'Paléozoïque' | 'Mésozoïque' | 'Cénozoïque';
+export type DatingUnit = 'Ma' | 'ka' | 'unknown';
 
 export interface Fossil {
   id: string;
   period: Period; // Main Era
   detailedPeriodStart?: string;
   detailedPeriodEnd?: string;
+  datingUnit?: DatingUnit;
+  datingValue?: string;
+  datingPrecision?: string;
   carouselImage: string; // Image for the carousel button
   
   // Fiche type
