@@ -5,6 +5,41 @@ import fs from 'fs';
 import { defineConfig, Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
+function sanitizeStandaloneHtml(rawHtml: string): string {
+  let html = rawHtml;
+
+  // 1. Remove modulepreload link tags
+  html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+
+  // 2. Remove crossorigin from style tags
+  html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
+
+  // 3. Extract non-JSON scripts from head/body and position them cleanly at the end of <body> after <div id="root">
+  const scriptRegex = /<script\b(?![^>]*type=["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi;
+  const extractedScripts: string[] = [];
+
+  html = html.replace(scriptRegex, (match) => {
+    let cleanTag = match;
+    cleanTag = cleanTag.replace(/\s+type=["']module["']/gi, '');
+    cleanTag = cleanTag.replace(/\s+crossorigin(?:=["'][^"']*["'])?/gi, '');
+    cleanTag = cleanTag.replace(/\s+defer\b/gi, '');
+    cleanTag = cleanTag.replace(/\s+async\b/gi, '');
+    extractedScripts.push(cleanTag);
+    return '';
+  });
+
+  if (extractedScripts.length > 0) {
+    const combinedScripts = extractedScripts.join('\n');
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', () => combinedScripts + '\n</body>');
+    } else {
+      html += '\n' + combinedScripts;
+    }
+  }
+
+  return html;
+}
+
 function standaloneCompatibilityPlugin(): Plugin {
   return {
     name: 'standalone-compatibility-plugin',
@@ -14,16 +49,7 @@ function standaloneCompatibilityPlugin(): Plugin {
         if (!fs.existsSync(distIndexPath)) return;
 
         let html = fs.readFileSync(distIndexPath, 'utf8');
-
-        // 1. Remove modulepreload link tags
-        html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
-
-        // 2. Remove crossorigin from style tags
-        html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
-
-        // 3. Convert script tags to classic scripts safely with defer
-        html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1 defer$2>');
-        html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
+        html = sanitizeStandaloneHtml(html);
 
         // Write back to dist/index.html
         fs.writeFileSync(distIndexPath, html, 'utf8');

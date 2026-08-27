@@ -29,7 +29,9 @@ function initRoot() {
   }
 }
 
-if (document.readyState === 'loading') {
+if (document.getElementById('root')) {
+  initRoot();
+} else if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initRoot);
 } else {
   initRoot();
