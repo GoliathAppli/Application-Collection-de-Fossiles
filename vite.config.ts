@@ -21,8 +21,8 @@ function standaloneCompatibilityPlugin(): Plugin {
         // 2. Remove crossorigin from style tags
         html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
 
-        // 3. Convert script tags to classic scripts safely without modifying script bodies
-        html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+        // 3. Convert script tags to classic scripts safely with defer
+        html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1 defer$2>');
         html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
         // Write back to dist/index.html

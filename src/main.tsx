@@ -1,13 +1,37 @@
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
-);
+function initRoot() {
+  try {
+    let rootElement = document.getElementById('root');
+    if (!rootElement) {
+      rootElement = document.createElement('div');
+      rootElement.id = 'root';
+      if (document.body) {
+        document.body.appendChild(rootElement);
+      } else {
+        document.documentElement.appendChild(rootElement);
+      }
+    }
+
+    createRoot(rootElement).render(
+      <StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+  } catch (err) {
+    console.error('Fatal initialization error:', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRoot);
+} else {
+  initRoot();
+}
+
