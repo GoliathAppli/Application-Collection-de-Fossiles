@@ -1,8 +1,10 @@
-const CACHE_NAME = 'fossil-collection-pwa-v1';
+const CACHE_NAME = 'fossil-collection-pwa-v2';
 
-const PRECACHE_ASSETS = [
+const CRITICAL_PWA_ASSETS = [
   './',
   './index.html',
+  './app-bundle.html',
+  './Mon_Exposition_Fossiles.html',
   './manifest.json',
   './icon.svg',
   './icon-192.png',
@@ -11,35 +13,81 @@ const PRECACHE_ASSETS = [
   './apple-touch-icon.png'
 ];
 
-// Install Event - Precache key static assets
+// Install Event - Precache the single-file offline bundle & core assets
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('[SW] Pre-caching asset warning:', err);
-      });
-    }).then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+
+      // Attempt to load the fully inlined standalone bundle first
+      try {
+        const bundleResp = await fetch('./app-bundle.html', { cache: 'no-cache' }).catch(() => null)
+          || await fetch('./Mon_Exposition_Fossiles.html', { cache: 'no-cache' }).catch(() => null)
+          || await fetch('./index.html', { cache: 'no-cache' }).catch(() => null);
+
+        if (bundleResp && bundleResp.ok) {
+          const bundleBlob = await bundleResp.blob();
+          const createHtmlResponse = () => new Response(bundleBlob, {
+            status: 200,
+            headers: { 'Content-Type': 'text/html; charset=utf-8' }
+          });
+
+          // Store the complete singlefile bundle under multiple navigation keys
+          await Promise.all([
+            cache.put('/', createHtmlResponse()),
+            cache.put('./', createHtmlResponse()),
+            cache.put('/index.html', createHtmlResponse()),
+            cache.put('./index.html', createHtmlResponse()),
+            cache.put('/app-bundle.html', createHtmlResponse()),
+            cache.put('./app-bundle.html', createHtmlResponse()),
+            cache.put('/Mon_Exposition_Fossiles.html', createHtmlResponse()),
+            cache.put('./Mon_Exposition_Fossiles.html', createHtmlResponse()),
+            cache.put(self.registration.scope, createHtmlResponse())
+          ]);
+          console.log('[SW] Standalone single-file offline bundle cached successfully.');
+        }
+      } catch (err) {
+        console.warn('[SW] Notice during offline bundle caching:', err);
+      }
+
+      // Precache individual icons and assets safely
+      await Promise.allSettled(
+        CRITICAL_PWA_ASSETS.map(async (url) => {
+          try {
+            const resp = await fetch(url, { cache: 'no-cache' });
+            if (resp && resp.ok) {
+              await cache.put(url, resp);
+            }
+          } catch (e) {
+            // Non-critical asset failure won't stop installation
+          }
+        })
+      );
+    })()
   );
 });
 
-// Activate Event - Clean up stale caches
+// Activate Event - Clean up stale caches & claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
             return caches.delete(key);
           }
         })
       );
-    }).then(() => self.clients.claim())
+      await self.clients.claim();
+      console.log('[SW] Activated & claimed all clients.');
+    })()
   );
 });
 
-// Fetch Event - Stale-While-Revalidate / Network-First with Cache Fallback
+// Fetch Event - 100% Offline Navigation & Asset Fallback
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
@@ -47,58 +95,88 @@ self.addEventListener('fetch', (event) => {
   // Skip browser extensions & non-http protocols
   if (!url.protocol.startsWith('http')) return;
 
-  // For API endpoints that generate downloads, do not cache
+  // For API endpoints, do not cache with Service Worker
   if (url.pathname.includes('/api/')) {
     return;
   }
 
-  // HTML navigation requests -> Network first, fallback to cached index.html
-  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+  // 1. Navigation / Document requests (HTML pages)
+  const isNavigate = event.request.mode === 'navigate' ||
+                     event.request.destination === 'document' ||
+                     (event.request.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigate) {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+      (async () => {
+        try {
+          // Attempt network first when online
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, networkResponse.clone());
+            return networkResponse;
           }
-          return networkResponse;
-        })
-        .catch(async () => {
-          const cachedResponse = await caches.match(event.request);
-          if (cachedResponse) return cachedResponse;
-          return caches.match('./index.html');
-        })
+        } catch (err) {
+          // Network failed -> we are offline!
+        }
+
+        // Offline fallback: match direct request or fallback to single-file bundle
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(event.request)
+          || await cache.match('/')
+          || await cache.match('./')
+          || await cache.match('/index.html')
+          || await cache.match('./index.html')
+          || await cache.match('/app-bundle.html')
+          || await cache.match('./app-bundle.html')
+          || await cache.match('/Mon_Exposition_Fossiles.html')
+          || await cache.match('./Mon_Exposition_Fossiles.html');
+
+        if (cached) {
+          return cached;
+        }
+
+        return new Response('Mode hors-ligne actif. Veuillez ouvrir la collection depuis l\'accueil.', {
+          status: 200,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      })()
     );
     return;
   }
 
-  // Static Assets (JS, CSS, images, fonts, icons) -> Cache First with Network update
+  // 2. Static Assets (CSS, JS, images, fonts, icons)
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch in background to update cache
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(event.request);
+
+      if (cached) {
+        // Fetch update in background if online
         fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
+          .then((networkResp) => {
+            if (networkResp && networkResp.ok) {
+              cache.put(event.request, networkResp);
             }
           })
           .catch(() => {});
-        return cachedResponse;
+        return cached;
       }
 
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If offline and image requested, could return fallback
-          return new Response('Hors-ligne', { status: 503, statusText: 'Offline' });
-        });
-    })
+      try {
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && networkResponse.ok) {
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (err) {
+        // If image/icon missing offline, try matching SVG icon or returning empty response
+        if (event.request.destination === 'image') {
+          const fallbackIcon = await cache.match('./icon.svg') || await cache.match('/icon.svg');
+          if (fallbackIcon) return fallbackIcon;
+        }
+        return new Response('', { status: 408, statusText: 'Request timed out / offline' });
+      }
+    })()
   );
 });

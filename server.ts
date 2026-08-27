@@ -12,6 +12,21 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  // Explicit route to serve the complete self-contained offline bundle for PWA and offline precache
+  app.get(['/app-bundle.html', '/Mon_Exposition_Fossiles.html'], (req, res) => {
+    const distPath = path.join(process.cwd(), 'dist', 'index.html');
+    const publicBundle = path.join(process.cwd(), 'public', 'Mon_Exposition_Fossiles.html');
+    if (fs.existsSync(distPath)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.sendFile(distPath);
+    } else if (fs.existsSync(publicBundle)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.sendFile(publicBundle);
+    } else {
+      res.status(404).send("Bundle in preparation");
+    }
+  });
+
   app.post("/api/download-app", async (req, res) => {
     try {
       const { data, banner } = req.body;
