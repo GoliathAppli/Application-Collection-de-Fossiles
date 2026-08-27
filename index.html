@@ -42,7 +42,8 @@
               removeItem: function(k) { delete _mem[k]; },
               clear: function() { _mem = {}; }
             },
-            writable: true
+            writable: true,
+            configurable: true
           });
         } catch (polyErr) {}
       }
@@ -62,7 +63,12 @@
         }
       } catch (e) {}
       try {
-        var savedTheme = (window.localStorage && window.localStorage.getItem('app_theme')) || 'dark';
+        var savedTheme = 'dark';
+        try {
+          if (window.localStorage) {
+            savedTheme = window.localStorage.getItem('app_theme') || 'dark';
+          }
+        } catch (_) {}
         if (savedTheme === 'light') {
           document.documentElement.classList.add('light');
           document.documentElement.classList.remove('dark');

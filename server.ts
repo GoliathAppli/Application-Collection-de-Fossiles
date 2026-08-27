@@ -7,31 +7,15 @@ import { exec } from "child_process";
 function sanitizeStandaloneHtml(rawHtml: string): string {
   let html = rawHtml;
   // 1. Remove modulepreload link tags
-  html = html.replace(/<link[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+  html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
 
   // 2. Remove crossorigin from style tags
-  html = html.replace(/<style([^>]*)crossorigin([^>]*)>/gi, '<style$1$2>');
+  html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
 
-  // 3. Extract module script contents and convert to standard classic script at end of body
-  const scripts: string[] = [];
-  html = html.replace(/<script\s+type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
-    scripts.push(scriptBody);
-    return '';
-  });
+  // 3. Convert script tags to classic scripts by safely removing type="module" and crossorigin from the opening tag only
+  html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+  html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
-  html = html.replace(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
-    scripts.push(scriptBody);
-    return '';
-  });
-
-  if (scripts.length > 0) {
-    const combinedScripts = scripts.map(s => `<script>\n${s}\n</script>`).join('\n');
-    if (html.includes('</body>')) {
-      html = html.replace('</body>', `${combinedScripts}\n</body>`);
-    } else {
-      html += `\n${combinedScripts}`;
-    }
-  }
   return html;
 }
 
@@ -64,10 +48,10 @@ async function startServer() {
       const { data, banner } = req.body;
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
-      // Always freshly compile the standalone bundle if in development mode or if dist is missing
-      if (process.env.NODE_ENV !== 'production' || !fs.existsSync(distPath)) {
+      // Use pre-compiled bundle if available for instant download, or compile on demand if missing
+      if (!fs.existsSync(distPath)) {
         await new Promise<void>((resolve, reject) => {
-          exec('npx vite build', (err, stdout, stderr) => {
+          exec('npx vite build', { env: { ...process.env, NODE_ENV: 'production' } }, (err, stdout, stderr) => {
             if (err) {
               console.error("Vite build error during download-app:", stderr || err);
               if (fs.existsSync(distPath)) return resolve();

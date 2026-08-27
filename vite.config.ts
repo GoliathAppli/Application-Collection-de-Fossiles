@@ -16,32 +16,14 @@ function standaloneCompatibilityPlugin(): Plugin {
         let html = fs.readFileSync(distIndexPath, 'utf8');
 
         // 1. Remove modulepreload link tags
-        html = html.replace(/<link[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+        html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
 
         // 2. Remove crossorigin from style tags
-        html = html.replace(/<style([^>]*)crossorigin([^>]*)>/gi, '<style$1$2>');
+        html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
 
-        // 3. Extract module script contents and convert to standard classic script at end of body
-        const scripts: string[] = [];
-        html = html.replace(/<script\s+type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
-          scripts.push(scriptBody);
-          return '';
-        });
-
-        // Also catch any other module scripts
-        html = html.replace(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
-          scripts.push(scriptBody);
-          return '';
-        });
-
-        if (scripts.length > 0) {
-          const combinedScripts = scripts.map(s => `<script>\n${s}\n</script>`).join('\n');
-          if (html.includes('</body>')) {
-            html = html.replace('</body>', `${combinedScripts}\n</body>`);
-          } else {
-            html += `\n${combinedScripts}`;
-          }
-        }
+        // 3. Convert script tags to classic scripts safely without modifying script bodies
+        html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+        html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
         // Write back to dist/index.html
         fs.writeFileSync(distIndexPath, html, 'utf8');
@@ -54,7 +36,7 @@ function standaloneCompatibilityPlugin(): Plugin {
         fs.writeFileSync(path.resolve(publicDir, 'Mon_Exposition_Fossiles.html'), html, 'utf8');
         fs.writeFileSync(path.resolve(publicDir, 'app-bundle.html'), html, 'utf8');
         fs.writeFileSync(path.resolve(__dirname, 'Mon_Exposition_Fossiles.html'), html, 'utf8');
-        console.log('[Standalone] Mon_Exposition_Fossiles.html successfully sanitized and prepared for offline/file:// usage.');
+        console.log('[Standalone] Mon_Exposition_Fossiles.html successfully prepared for offline/file:// usage.');
       } catch (err) {
         console.warn('[Standalone] Post-processing notice:', err);
       }

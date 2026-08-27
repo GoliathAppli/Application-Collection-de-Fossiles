@@ -1,9 +1,11 @@
+import { safeStorage } from './storage';
+
 export const isMuted = (): boolean => {
-  return localStorage.getItem('audio_muted') === 'true';
+  return safeStorage.getItem('audio_muted') === 'true';
 };
 
 export const setMuted = (muted: boolean) => {
-  localStorage.setItem('audio_muted', muted ? 'true' : 'false');
+  safeStorage.setItem('audio_muted', muted ? 'true' : 'false');
 };
 
 export const playDinoSound = () => {

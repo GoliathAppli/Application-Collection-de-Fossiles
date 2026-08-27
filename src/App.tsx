@@ -21,6 +21,7 @@ import {
 } from './store';
 import { parseFossilPrice } from './utils/pricing';
 import { playDinoSound, isMuted, setMuted } from './utils/audio';
+import { safeStorage } from './utils/storage';
 import { Shell, Dna, ChevronLeft, ChevronRight, Plus, Download, Upload, LayoutGrid, GalleryHorizontal, Settings, Volume2, VolumeX, Moon, Sun, Globe, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
 import { TrilobiteIcon, MammothIcon, AmmoniteIcon } from './components/Icons';
 import { goliathBadgeDataUri } from './assets/goliathBadge';
@@ -46,7 +47,7 @@ export default function App() {
 
   // Theme & sound state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = (localStorage.getItem('app_theme') as 'light' | 'dark') || 'dark';
+    const saved = (safeStorage.getItem('app_theme') as 'light' | 'dark') || 'dark';
     if (typeof document !== 'undefined') {
       const root = document.documentElement;
       if (saved === 'light') {
@@ -72,7 +73,7 @@ export default function App() {
   const handleToggleTheme = (nextTheme?: 'light' | 'dark') => {
     const targetTheme = nextTheme || (theme === 'light' ? 'dark' : 'light');
     setTheme(targetTheme);
-    localStorage.setItem('app_theme', targetTheme);
+    safeStorage.setItem('app_theme', targetTheme);
     const root = document.documentElement;
     if (targetTheme === 'light') {
       root.classList.add('light');
@@ -101,7 +102,7 @@ export default function App() {
       document.body.classList.add('dark');
       document.body.classList.remove('light');
     }
-    localStorage.setItem('app_theme', theme);
+    safeStorage.setItem('app_theme', theme);
   }, [theme]);
 
   // States for startup synchronization and local directory sync
@@ -472,25 +473,10 @@ export default function App() {
       }
 
       // Final client-side sanitization to guarantee standard classic scripts (runs without CORS / type=module block on file://)
-      htmlContent = htmlContent.replace(/<link[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
-      htmlContent = htmlContent.replace(/<style([^>]*)crossorigin([^>]*)>/gi, '<style$1$2>');
-      const clientScripts: string[] = [];
-      htmlContent = htmlContent.replace(/<script\s+type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, body) => {
-        clientScripts.push(body);
-        return '';
-      });
-      htmlContent = htmlContent.replace(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, body) => {
-        clientScripts.push(body);
-        return '';
-      });
-      if (clientScripts.length > 0) {
-        const combined = clientScripts.map(s => `<script>\n${s}\n</script>`).join('\n');
-        if (htmlContent.includes('</body>')) {
-          htmlContent = htmlContent.replace('</body>', `${combined}\n</body>`);
-        } else {
-          htmlContent += `\n${combined}`;
-        }
-      }
+      htmlContent = htmlContent.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+      htmlContent = htmlContent.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
+      htmlContent = htmlContent.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+      htmlContent = htmlContent.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
