@@ -1,12 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Ma collection de fossiles</title>
+    
+    <!-- PWA & Mobile Meta Tags -->
+    <meta name="description" content="Inventaire géologique, fiches techniques et valorisation de collection paléontologique" />
+    <meta name="application-name" content="Ma Collection de Fossiles" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Fossiles" />
+    <meta name="theme-color" content="#0B0F19" />
+    <meta name="theme-color" content="#0B0F19" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)" />
+
+    <!-- Icons & Manifest -->
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="mask-icon" href="./icon.svg" color="#D4AF37" />
+
+    <script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">{}</script>
+    <script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">{}</script>
     <script>
       window.__INITIAL_DATA__ = null;
       window.__INITIAL_BANNER__ = null;
+      try {
+        var dataScript = document.getElementById('__FOSSIL_APP_INITIAL_DATA__');
+        if (dataScript && dataScript.textContent && dataScript.textContent.trim().length > 2) {
+          window.__INITIAL_DATA__ = JSON.parse(dataScript.textContent);
+        }
+      } catch (e) {}
+      try {
+        var bannerScript = document.getElementById('__FOSSIL_APP_INITIAL_BANNER__');
+        if (bannerScript && bannerScript.textContent && bannerScript.textContent.trim().length > 2) {
+          window.__INITIAL_BANNER__ = JSON.parse(bannerScript.textContent);
+        }
+      } catch (e) {}
       try {
         var savedTheme = localStorage.getItem('app_theme') || 'dark';
         if (savedTheme === 'light') {
@@ -17,6 +51,17 @@
           document.documentElement.classList.remove('light');
         }
       } catch (e) {}
+
+      // Service Worker Registration for PWA Offline Support
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('./sw.js').then(function(reg) {
+            console.log('[PWA] Service Worker registered with scope:', reg.scope);
+          }).catch(function(err) {
+            console.warn('[PWA] Service Worker registration failed:', err);
+          });
+        });
+      }
     </script>
   </head>
   <body>

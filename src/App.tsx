@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Fossil, Period, TechnicalSheet } from './types';
-import { getFossils, saveFossils, exportData, importData, getHomeImage, saveHomeImage } from './store';
+import { 
+  getFossils, 
+  saveFossils, 
+  exportData, 
+  importData, 
+  getHomeImage, 
+  saveHomeImage, 
+  getSheets, 
+  saveSheets, 
+  getLastActiveFossilId, 
+  getAutoOpenSetting, 
+  saveAutoOpenSetting, 
+  getDirectoryHandle, 
+  saveDirectoryHandle, 
+  clearDirectoryHandle, 
+  readFromLocalDirectory, 
+  syncToLocalDirectory 
+} from './store';
+import { parseFossilPrice } from './utils/pricing';
 import { playDinoSound, isMuted, setMuted } from './utils/audio';
 import { Shell, Dna, ChevronLeft, ChevronRight, Plus, Download, Upload, LayoutGrid, GalleryHorizontal, Settings, Volume2, VolumeX, Moon, Sun, Globe, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
 import { TrilobiteIcon, MammothIcon, AmmoniteIcon } from './components/Icons';
 import { goliathBadgeDataUri } from './assets/goliathBadge';
 import ImageUpload from './components/ImageUpload';
+import PwaInstallCard from './components/PwaInstallCard';
 import FossilFormView from './views/FossilFormView';
 import TimescaleView from './views/TimescaleView';
 import TechnicalSheetsView from './views/TechnicalSheetsView';
@@ -97,7 +116,6 @@ export default function App() {
       setFossils(data);
       
       // Load last active fossil
-      const { getLastActiveFossilId, getAutoOpenSetting, getDirectoryHandle } = await import('./store');
       const lastId = await getLastActiveFossilId();
       const autoOpenSetting = await getAutoOpenSetting();
       setAutoOpen(autoOpenSetting);
@@ -137,7 +155,6 @@ export default function App() {
     if (params.get('compile-app') === 'true' || params.get('download-standalone') === 'true') {
       Promise.all([getFossils(), getHomeImage()]).then(async ([fossilsData, homeImg]) => {
         try {
-          const { exportData } = await import('./store');
           const dataStr = await exportData();
           
           const response = await fetch('/api/download-app', {
@@ -192,8 +209,6 @@ export default function App() {
           // ignore
         }
       }
-
-      const { readFromLocalDirectory, saveDirectoryHandle, saveFossils, saveSheets, saveHomeImage, getSheets, getHomeImage } = await import('./store');
       
       // 1. Check if the directory already contains a saved JSON backup
       const existingBackup = await readFromLocalDirectory(handle);
@@ -263,7 +278,6 @@ export default function App() {
       const permission = await dirHandle.requestPermission({ mode: 'readwrite' });
       if (permission === 'granted') {
         setDirPermissionGranted(true);
-        const { readFromLocalDirectory, syncToLocalDirectory, saveFossils, saveSheets, saveHomeImage, getSheets, getHomeImage } = await import('./store');
         
         // If app has no fossils, check if directory has backup to restore
         if (fossils.length === 0) {
@@ -299,7 +313,6 @@ export default function App() {
   };
 
   const handleDisconnectDirectory = async () => {
-    const { clearDirectoryHandle } = await import('./store');
     await clearDirectoryHandle();
     setDirHandle(null);
     setDirPermissionGranted(true);
@@ -308,7 +321,6 @@ export default function App() {
   };
 
   const handleToggleAutoOpen = async (checked: boolean) => {
-    const { saveAutoOpenSetting } = await import('./store');
     await saveAutoOpenSetting(checked);
     setAutoOpen(checked);
   };
@@ -374,11 +386,11 @@ export default function App() {
     setIsDownloadingApp(true);
     setDownloadSuccessMessage(null);
     try {
-      const { exportData } = await import('./store');
       const dataStr = await exportData();
       const homeImg = await getHomeImage();
 
       let htmlContent: string | null = null;
+      let alreadyInjected = false;
 
       // 1. Try the backend compiler endpoint first so it freshly compiles the singlefile bundle
       try {
@@ -395,6 +407,7 @@ export default function App() {
 
         if (response.ok) {
           htmlContent = await response.text();
+          alreadyInjected = true;
         }
       } catch (e) {
         console.warn("Backend compiler endpoint unavailable, falling back to static bundles:", e);
@@ -429,22 +442,32 @@ export default function App() {
         throw new Error("Impossible de récupérer le fichier autonome. Veuillez vérifier votre connexion.");
       }
 
-      // Inject the current data and banner if needed
-      if (htmlContent.includes('window.__INITIAL_DATA__ = null;')) {
-        htmlContent = htmlContent.replace('window.__INITIAL_DATA__ = null;', `window.__INITIAL_DATA__ = ${dataStr};`);
-      } else if (htmlContent.includes('window.__INITIAL_DATA__=')) {
-        htmlContent = htmlContent.replace(/window\.__INITIAL_DATA__\s*=\s*[^;]+;/, `window.__INITIAL_DATA__ = ${dataStr};`);
-      } else if (!htmlContent.includes(dataStr.slice(0, 30))) {
-        htmlContent = htmlContent.replace('<head>', `<head><script>window.__INITIAL_DATA__ = ${dataStr};</script>`);
-      }
+      // Inject the current data and banner if needed (when not already injected by backend)
+      if (!alreadyInjected) {
+        const safeDataJson = dataStr.replace(/<\/script/gi, '<\\/script');
+        if (htmlContent.includes('id="__FOSSIL_APP_INITIAL_DATA__"')) {
+          htmlContent = htmlContent.replace(
+            /<script id="__FOSSIL_APP_INITIAL_DATA__" type="application\/json">[\s\S]*?<\/script>/,
+            () => `<script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`
+          );
+        } else if (htmlContent.includes('window.__INITIAL_DATA__ = null;')) {
+          htmlContent = htmlContent.replace('window.__INITIAL_DATA__ = null;', () => `window.__INITIAL_DATA__ = ${safeDataJson};`);
+        } else {
+          htmlContent = htmlContent.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`);
+        }
 
-      if (homeImg) {
-        if (htmlContent.includes('window.__INITIAL_BANNER__ = null;')) {
-          htmlContent = htmlContent.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};`);
-        } else if (htmlContent.includes('window.__INITIAL_BANNER__=')) {
-          htmlContent = htmlContent.replace(/window\.__INITIAL_BANNER__\s*=\s*[^;]+;/, `window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};`);
-        } else if (!htmlContent.includes(homeImg.slice(0, 30))) {
-          htmlContent = htmlContent.replace('<head>', `<head><script>window.__INITIAL_BANNER__ = ${JSON.stringify(homeImg)};</script>`);
+        if (homeImg) {
+          const safeBannerJson = JSON.stringify(homeImg).replace(/<\/script/gi, '<\\/script');
+          if (htmlContent.includes('id="__FOSSIL_APP_INITIAL_BANNER__"')) {
+            htmlContent = htmlContent.replace(
+              /<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application\/json">[\s\S]*?<\/script>/,
+              () => `<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${safeBannerJson}</script>`
+            );
+          } else if (htmlContent.includes('window.__INITIAL_BANNER__ = null;')) {
+            htmlContent = htmlContent.replace('window.__INITIAL_BANNER__ = null;', () => `window.__INITIAL_BANNER__ = ${safeBannerJson};`);
+          } else {
+            htmlContent = htmlContent.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${safeBannerJson}</script>`);
+          }
         }
       }
 
@@ -810,6 +833,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* Section: Application Mobile PWA */}
+          <PwaInstallCard isLight={isLight} />
+
           {/* Section: Import & Export */}
           <div className={`border rounded-3xl p-6 shadow-md transition-all ${isLight ? 'bg-white border-slate-200 text-black' : 'border-[#D4AF37]/25 bg-[#101A36]/60 text-white'}`}>
             <h3 className={`text-lg font-serif font-bold uppercase tracking-widest mb-4 flex items-center gap-2 border-b pb-2 ${isLight ? 'text-black border-slate-200' : 'text-[#D4AF37] border-[#D4AF37]/20'}`}>
@@ -1054,14 +1080,12 @@ export default function App() {
 
               // Double check sheets store synchronization
               try {
-                const { getSheets, saveSheets } = await import('./store');
                 const sheets = await getSheets();
                 const idx = sheets.findIndex(s => 
                   (f.id && s.fossilId === f.id) || 
                   (f.id && s.id === f.id) || 
                   (f.title && s.nom === f.title)
                 );
-                const { parseFossilPrice } = await import('./utils/pricing');
                 const priceVal = parseFossilPrice(f.techSheetPrix);
                 const sheetData = {
                   id: (idx >= 0 ? sheets[idx].id : f.id),
@@ -1099,7 +1123,6 @@ export default function App() {
               await saveFossils(newFossils);
               
               try {
-                const { getSheets, saveSheets } = await import('./store');
                 const sheets = await getSheets();
                 const newSheets = sheets.filter(s => s.id !== fossilId && s.fossilId !== fossilId);
                 await saveSheets(newSheets);

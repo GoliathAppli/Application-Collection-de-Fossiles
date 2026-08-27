@@ -17,13 +17,25 @@ async function startServer() {
       const { data, banner } = req.body;
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
-      if (!fs.existsSync(distPath)) {
+      // Always freshly compile the standalone bundle if in development mode or if dist is missing
+      if (process.env.NODE_ENV !== 'production' || !fs.existsSync(distPath)) {
         await new Promise<void>((resolve, reject) => {
           exec('npx vite build', (err, stdout, stderr) => {
             if (err) {
               console.error("Vite build error during download-app:", stderr || err);
               if (fs.existsSync(distPath)) return resolve();
               return reject(err);
+            }
+            try {
+              if (fs.existsSync(distPath)) {
+                fs.copyFileSync(distPath, path.join(process.cwd(), 'Mon_Exposition_Fossiles.html'));
+                const publicDir = path.join(process.cwd(), 'public');
+                if (fs.existsSync(publicDir)) {
+                  fs.copyFileSync(distPath, path.join(publicDir, 'Mon_Exposition_Fossiles.html'));
+                }
+              }
+            } catch (copyErr) {
+              console.warn("Notice during standalone file copy:", copyErr);
             }
             resolve();
           });
@@ -37,12 +49,18 @@ async function startServer() {
       let html = fs.readFileSync(distPath, 'utf8');
       
       if (data) {
-        if (html.includes('window.__INITIAL_DATA__ = null;')) {
-          html = html.replace('window.__INITIAL_DATA__ = null;', `window.__INITIAL_DATA__ = ${data};`);
-        } else if (html.includes('window.__INITIAL_DATA__=')) {
-          html = html.replace(/window\.__INITIAL_DATA__\s*=\s*[^;]+;/, `window.__INITIAL_DATA__ = ${data};`);
+        let dataString = typeof data === 'string' ? data : JSON.stringify(data);
+        const safeDataJson = dataString.replace(/<\/script/gi, '<\\/script');
+        
+        if (html.includes('id="__FOSSIL_APP_INITIAL_DATA__"')) {
+          html = html.replace(
+            /<script id="__FOSSIL_APP_INITIAL_DATA__" type="application\/json">[\s\S]*?<\/script>/,
+            () => `<script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`
+          );
+        } else if (html.includes('window.__INITIAL_DATA__ = null;')) {
+          html = html.replace('window.__INITIAL_DATA__ = null;', () => `window.__INITIAL_DATA__ = ${safeDataJson};`);
         } else {
-          html = html.replace('<head>', `<head><script>window.__INITIAL_DATA__ = ${data};</script>`);
+          html = html.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`);
         }
       }
       
@@ -60,12 +78,16 @@ async function startServer() {
       }
       
       if (bannerContent) {
-         if (html.includes('window.__INITIAL_BANNER__ = null;')) {
-           html = html.replace('window.__INITIAL_BANNER__ = null;', `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
-         } else if (html.includes('window.__INITIAL_BANNER__=')) {
-           html = html.replace(/window\.__INITIAL_BANNER__\s*=\s*[^;]+;/, `window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};`);
+         const bannerJson = JSON.stringify(bannerContent).replace(/<\/script/gi, '<\\/script');
+         if (html.includes('id="__FOSSIL_APP_INITIAL_BANNER__"')) {
+           html = html.replace(
+             /<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application\/json">[\s\S]*?<\/script>/,
+             () => `<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${bannerJson}</script>`
+           );
+         } else if (html.includes('window.__INITIAL_BANNER__ = null;')) {
+           html = html.replace('window.__INITIAL_BANNER__ = null;', () => `window.__INITIAL_BANNER__ = ${bannerJson};`);
          } else {
-           html = html.replace('<head>', `<head><script>window.__INITIAL_BANNER__ = ${JSON.stringify(bannerContent)};</script>`);
+           html = html.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${bannerJson}</script>`);
          }
       }
       

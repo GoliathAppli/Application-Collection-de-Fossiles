@@ -63,14 +63,20 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
           ? f.id 
           : Array.from(mergedMap.keys()).find(k => {
               const item = mergedMap.get(k);
-              return item && (item.fossilId === f.id || (f.title && item.nom === f.title));
+              return item && (
+                (item.fossilId && f.id && item.fossilId === f.id) || 
+                (item.id && f.id && item.id === f.id) || 
+                (f.title && item.nom && item.nom.trim().toLowerCase() === f.title.trim().toLowerCase())
+              );
             });
+
+        const parsedFossilPrice = parseFossilPrice(f.techSheetPrix ?? (f as any).prix ?? (f as any).price ?? (f as any).valeur);
 
         if (existingKey) {
           const item = mergedMap.get(existingKey)!;
           // Sync missing or updated properties
           if (!item.fossilId && f.id) item.fossilId = f.id;
-          if (f.title && !item.nom) item.nom = f.title;
+          if (f.title && (!item.nom || item.nom === 'Sans nom')) item.nom = f.title;
           if (!item.nomPhoto && (f.carouselImage || f.mainImage)) {
             item.nomPhoto = f.carouselImage || f.mainImage;
           }
@@ -83,9 +89,13 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
           if (!item.fossilDating && f.fossilDating) {
             item.fossilDating = f.fossilDating;
           }
-          if (parseFossilPrice(item.prix) === 0 && parseFossilPrice(f.techSheetPrix) > 0) {
-            item.prix = parseFossilPrice(f.techSheetPrix);
+          
+          const parsedSheetPrice = parseFossilPrice(item.prix);
+          const effectivePrice = Math.max(parsedFossilPrice, parsedSheetPrice);
+          if (effectivePrice > 0) {
+            item.prix = effectivePrice;
           }
+          
           if (!item.typeSheet && f.techSheetType) {
             item.typeSheet = f.techSheetType;
           }
@@ -93,6 +103,8 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
           if (!item.lieuAchat && f.techSheetLieuAchat) item.lieuAchat = f.techSheetLieuAchat;
           if (!item.datePrelevement && f.techSheetDatePrelevement) item.datePrelevement = f.techSheetDatePrelevement;
           if (!item.lieuPrelevement && f.techSheetLieuPrelevement) item.lieuPrelevement = f.techSheetLieuPrelevement;
+          if (!item.certificat && f.techSheetCertificat) item.certificat = f.techSheetCertificat;
+          if (!item.certificatPhoto && f.techSheetCertificatPhoto) item.certificatPhoto = f.techSheetCertificatPhoto;
         } else {
           // Add newly discovered fossil to sheets
           const newSheet: TechnicalSheet = {
@@ -108,7 +120,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
             lieuAchat: f.techSheetLieuAchat || '',
             certificat: f.techSheetCertificat || 'non',
             certificatPhoto: f.techSheetCertificatPhoto || '',
-            prix: parseFossilPrice(f.techSheetPrix),
+            prix: parsedFossilPrice,
             datePrelevement: f.techSheetDatePrelevement || '',
             lieuPrelevement: f.techSheetLieuPrelevement || f.discoveryLocation || ''
           };
@@ -159,9 +171,10 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
   };
 
   const update = async (id: string, field: keyof TechnicalSheet, value: any) => {
-    const finalValue = field === 'prix' ? parseFossilPrice(value) : value;
+    const finalValue = field === 'prix' ? (typeof value === 'string' ? value : parseFossilPrice(value)) : value;
     const newSheets = sheets.map(s => s.id === id ? { ...s, [field]: finalValue } : s);
-    save(newSheets);
+    setSheets(newSheets);
+    await saveSheets(newSheets);
 
     // Synchronize corresponding fossil in store if present
     try {
@@ -175,7 +188,7 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
         if (fIdx >= 0) {
           const updatedFossils = [...fossils];
           const updatedFossil = { ...updatedFossils[fIdx] };
-          if (field === 'prix') updatedFossil.techSheetPrix = finalValue;
+          if (field === 'prix') updatedFossil.techSheetPrix = parseFossilPrice(value);
           if (field === 'typeSheet') updatedFossil.techSheetType = finalValue;
           if (field === 'dateAchat') updatedFossil.techSheetDateAchat = finalValue;
           if (field === 'lieuAchat') updatedFossil.techSheetLieuAchat = finalValue;
@@ -207,7 +220,10 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
   // Robust calculation of collection total value - sums all prices in the table
   const totalValue = useMemo(() => {
     return sheets.reduce((sum, s) => {
-      const p = parseFossilPrice(s.prix);
+      const raw = s.prix !== undefined && s.prix !== null
+        ? s.prix 
+        : ((s as any).techSheetPrix ?? (s as any).price ?? (s as any).valeur ?? 0);
+      const p = parseFossilPrice(raw);
       return sum + (isNaN(p) || p <= 0 ? 0 : p);
     }, 0);
   }, [sheets]);

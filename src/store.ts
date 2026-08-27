@@ -5,13 +5,56 @@ import { parseFossilPrice } from './utils/pricing';
 
 export const fossilStore = localforage.createInstance({
   name: 'fossilApp',
-  storeName: 'fossils'
+  storeName: 'fossils',
+  driver: [localforage.INDEXEDDB, localforage.LOCALSTORAGE, localforage.WEBSQL]
 });
 
 export const sheetStore = localforage.createInstance({
   name: 'fossilApp',
-  storeName: 'sheets'
+  storeName: 'sheets',
+  driver: [localforage.INDEXEDDB, localforage.LOCALSTORAGE, localforage.WEBSQL]
 });
+
+export function getEmbeddedInitialData(): { fossils?: Fossil[]; sheets?: TechnicalSheet[]; homeImage?: string; exportId?: string } | null {
+  try {
+    const el = typeof document !== 'undefined' ? document.getElementById('__FOSSIL_APP_INITIAL_DATA__') : null;
+    if (el && el.textContent && el.textContent.trim().length > 2 && el.textContent.trim() !== '{}') {
+      const parsed = JSON.parse(el.textContent);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {
+    console.warn("Embedded data parser error:", e);
+  }
+
+  try {
+    const raw = (window as any).__INITIAL_DATA__;
+    if (raw) {
+      if (typeof raw === 'string') return JSON.parse(raw);
+      if (typeof raw === 'object') return raw;
+    }
+  } catch (e) {
+    console.warn("window.__INITIAL_DATA__ parser error:", e);
+  }
+  return null;
+}
+
+export function getEmbeddedInitialBanner(): string | null {
+  try {
+    const el = typeof document !== 'undefined' ? document.getElementById('__FOSSIL_APP_INITIAL_BANNER__') : null;
+    if (el && el.textContent && el.textContent.trim().length > 2 && el.textContent.trim() !== '{}') {
+      const parsed = JSON.parse(el.textContent);
+      if (typeof parsed === 'string' && parsed) return parsed;
+      if (parsed && parsed.banner) return parsed.banner;
+    }
+  } catch (e) {}
+
+  try {
+    const raw = (window as any).__INITIAL_BANNER__;
+    if (typeof raw === 'string' && raw) return raw;
+  } catch (e) {}
+
+  return null;
+}
 
 let initDataProcessed = false;
 
@@ -20,24 +63,23 @@ async function checkAndSyncInitialData() {
   initDataProcessed = true;
 
   try {
-    const initData = (window as any).__INITIAL_DATA__;
+    const initData = getEmbeddedInitialData();
     if (initData && (initData.fossils || initData.sheets)) {
-      const storedExportId = await fossilStore.getItem<string>('currentExportId');
+      const storedExportId = await fossilStore.getItem<string>('currentExportId').catch(() => null);
       const incomingExportId = initData.exportId || 'embedded_init';
 
-      // If opening a new standalone HTML with new exportId, or if local storage is empty, initialize from embedded data
-      const existingFossils = await fossilStore.getItem<Fossil[]>('fossilList');
+      const existingFossils = await fossilStore.getItem<Fossil[]>('fossilList').catch(() => null);
       if (!storedExportId || storedExportId !== incomingExportId || !existingFossils || existingFossils.length === 0) {
         if (Array.isArray(initData.fossils) && initData.fossils.length > 0) {
-          await fossilStore.setItem('fossilList', initData.fossils);
+          await fossilStore.setItem('fossilList', initData.fossils).catch(() => {});
         }
         if (Array.isArray(initData.sheets) && initData.sheets.length > 0) {
-          await sheetStore.setItem('sheetList', initData.sheets);
+          await sheetStore.setItem('sheetList', initData.sheets).catch(() => {});
         }
         if (initData.homeImage) {
-          await fossilStore.setItem('homeImage', initData.homeImage);
+          await fossilStore.setItem('homeImage', initData.homeImage).catch(() => {});
         }
-        await fossilStore.setItem('currentExportId', incomingExportId);
+        await fossilStore.setItem('currentExportId', incomingExportId).catch(() => {});
       }
     }
   } catch (err) {
@@ -47,54 +89,82 @@ async function checkAndSyncInitialData() {
 
 export async function getFossils(): Promise<Fossil[]> {
   await checkAndSyncInitialData();
-  const fossils = await fossilStore.getItem<Fossil[]>('fossilList');
-  if (!fossils || fossils.length === 0) {
-    if ((window as any).__INITIAL_DATA__ && (window as any).__INITIAL_DATA__.fossils) {
-      const initFossils = (window as any).__INITIAL_DATA__.fossils;
-      await saveFossils(initFossils);
-      return initFossils;
+  try {
+    const fossils = await fossilStore.getItem<Fossil[]>('fossilList');
+    if (!fossils || fossils.length === 0) {
+      const initData = getEmbeddedInitialData();
+      if (initData && initData.fossils && initData.fossils.length > 0) {
+        await saveFossils(initData.fossils);
+        return initData.fossils;
+      }
+      const defaults = createDefaultFossils();
+      await saveFossils(defaults);
+      return defaults;
     }
-    const defaults = createDefaultFossils();
-    await saveFossils(defaults);
-    return defaults;
+    return fossils;
+  } catch (e) {
+    console.warn("Error in getFossils fallback:", e);
+    const initData = getEmbeddedInitialData();
+    return (initData && initData.fossils) || createDefaultFossils();
   }
-  return fossils;
 }
 
 export async function saveFossils(fossils: Fossil[]) {
-  await fossilStore.setItem('fossilList', fossils);
+  try {
+    await fossilStore.setItem('fossilList', fossils);
+  } catch (e) {
+    console.warn("fossilStore save error", e);
+  }
   await syncToLocalDirectory();
 }
 
 export async function getSheets(): Promise<TechnicalSheet[]> {
   await checkAndSyncInitialData();
-  const sheets = await sheetStore.getItem<TechnicalSheet[]>('sheetList');
-  if (!sheets || sheets.length === 0) {
-    if ((window as any).__INITIAL_DATA__ && (window as any).__INITIAL_DATA__.sheets) {
-      const initSheets = (window as any).__INITIAL_DATA__.sheets;
-      await saveSheets(initSheets);
-      return initSheets;
+  try {
+    const sheets = await sheetStore.getItem<TechnicalSheet[]>('sheetList');
+    if (!sheets || sheets.length === 0) {
+      const initData = getEmbeddedInitialData();
+      if (initData && initData.sheets && initData.sheets.length > 0) {
+        await saveSheets(initData.sheets);
+        return initData.sheets;
+      }
+      return [];
     }
-    return [];
+    return sheets;
+  } catch (e) {
+    console.warn("Error in getSheets fallback:", e);
+    const initData = getEmbeddedInitialData();
+    return (initData && initData.sheets) || [];
   }
-  return sheets;
 }
 
 export async function saveSheets(sheets: TechnicalSheet[]) {
-  await sheetStore.setItem('sheetList', sheets);
+  try {
+    await sheetStore.setItem('sheetList', sheets);
+  } catch (e) {
+    console.warn("sheetStore save error", e);
+  }
   await syncToLocalDirectory();
 }
 
 export async function getHomeImage(): Promise<string> {
-  if ((window as any).__INITIAL_BANNER__) {
-    return (window as any).__INITIAL_BANNER__;
+  const embeddedBanner = getEmbeddedInitialBanner();
+  if (embeddedBanner) return embeddedBanner;
+
+  try {
+    const img = await fossilStore.getItem<string>('homeImage');
+    return img || '/banner.png';
+  } catch {
+    return '/banner.png';
   }
-  const img = await fossilStore.getItem<string>('homeImage');
-  return img || '/banner.png';
 }
 
 export async function saveHomeImage(img: string) {
-  await fossilStore.setItem('homeImage', img);
+  try {
+    await fossilStore.setItem('homeImage', img);
+  } catch (e) {
+    console.warn("homeImage save error", e);
+  }
   await syncToLocalDirectory();
 }
 
@@ -116,10 +186,14 @@ export async function exportData(): Promise<string> {
       ? f.id
       : Array.from(sheetMap.keys()).find(k => {
           const item = sheetMap.get(k);
-          return item && (item.fossilId === f.id || (f.title && item.nom === f.title));
+          return item && (
+            (item.fossilId && f.id && item.fossilId === f.id) || 
+            (item.id && f.id && item.id === f.id) || 
+            (f.title && item.nom && item.nom.trim().toLowerCase() === f.title.trim().toLowerCase())
+          );
         });
 
-    const parsedPrice = parseFossilPrice(f.techSheetPrix);
+    const parsedFossilPrice = parseFossilPrice(f.techSheetPrix ?? (f as any).prix ?? (f as any).price ?? (f as any).valeur);
 
     if (existingKey) {
       const item = sheetMap.get(existingKey)!;
@@ -129,12 +203,18 @@ export async function exportData(): Promise<string> {
       if (!item.provenance && (f.techSheetProvenance || f.discoveryLocation)) item.provenance = f.techSheetProvenance || f.discoveryLocation || '';
       if (!item.periode && (f.detailedPeriodStart || f.period)) item.periode = f.detailedPeriodStart || f.period || '';
       if (!item.fossilDating && f.fossilDating) item.fossilDating = f.fossilDating;
-      if (parsedPrice > 0 && (!item.prix || item.prix === 0)) item.prix = parsedPrice;
+
+      const parsedSheetPrice = parseFossilPrice(item.prix);
+      const effectivePrice = Math.max(parsedFossilPrice, parsedSheetPrice);
+      if (effectivePrice > 0) item.prix = effectivePrice;
+
       if (!item.typeSheet && f.techSheetType) item.typeSheet = f.techSheetType;
       if (!item.dateAchat && f.techSheetDateAchat) item.dateAchat = f.techSheetDateAchat;
       if (!item.lieuAchat && f.techSheetLieuAchat) item.lieuAchat = f.techSheetLieuAchat;
       if (!item.datePrelevement && f.techSheetDatePrelevement) item.datePrelevement = f.techSheetDatePrelevement;
       if (!item.lieuPrelevement && f.techSheetLieuPrelevement) item.lieuPrelevement = f.techSheetLieuPrelevement;
+      if (!item.certificat && f.techSheetCertificat) item.certificat = f.techSheetCertificat;
+      if (!item.certificatPhoto && f.techSheetCertificatPhoto) item.certificatPhoto = f.techSheetCertificatPhoto;
     } else {
       const newSheet: TechnicalSheet = {
         id: f.id || uuidv4(),
@@ -149,7 +229,7 @@ export async function exportData(): Promise<string> {
         lieuAchat: f.techSheetLieuAchat || '',
         certificat: f.techSheetCertificat || 'non',
         certificatPhoto: f.techSheetCertificatPhoto || '',
-        prix: parsedPrice,
+        prix: parsedFossilPrice,
         datePrelevement: f.techSheetDatePrelevement || '',
         lieuPrelevement: f.techSheetLieuPrelevement || f.discoveryLocation || ''
       };

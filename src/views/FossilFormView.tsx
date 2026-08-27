@@ -5,7 +5,7 @@ import { ChevronLeft, Home, Printer, Plus, Trash2, Edit2, Info, ArrowLeft, Save,
 import { v4 as uuidv4 } from 'uuid';
 import { geologicalEras, allSubPeriods, subPeriodsDetails } from '../geology';
 import { calculateFossilClassification, formatFossilDatingString } from '../utils/dating';
-import { parseFossilPrice } from '../utils/pricing';
+import { parseFossilPrice, formatFossilPrice } from '../utils/pricing';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -1296,8 +1296,8 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                    {techSheet.lieuAchat && (
                      <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu d'achat:</span> {techSheet.lieuAchat}</p>
                    )}
-                   {techSheet.prix ? (
-                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Prix d'achat:</span> {techSheet.prix} €</p>
+                   {parseFossilPrice(techSheet.prix) > 0 ? (
+                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Prix d'achat:</span> {formatFossilPrice(techSheet.prix)} €</p>
                    ) : null}
                    {techSheet.certificat && (
                      <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Certificat d'authenticité:</span> {techSheet.certificat === 'oui' ? 'Oui' : 'Non'}</p>
