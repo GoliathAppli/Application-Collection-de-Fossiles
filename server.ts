@@ -4,6 +4,37 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { exec } from "child_process";
 
+function sanitizeStandaloneHtml(rawHtml: string): string {
+  let html = rawHtml;
+  // 1. Remove modulepreload link tags
+  html = html.replace(/<link[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+
+  // 2. Remove crossorigin from style tags
+  html = html.replace(/<style([^>]*)crossorigin([^>]*)>/gi, '<style$1$2>');
+
+  // 3. Extract module script contents and convert to standard classic script at end of body
+  const scripts: string[] = [];
+  html = html.replace(/<script\s+type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
+    scripts.push(scriptBody);
+    return '';
+  });
+
+  html = html.replace(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, scriptBody) => {
+    scripts.push(scriptBody);
+    return '';
+  });
+
+  if (scripts.length > 0) {
+    const combinedScripts = scripts.map(s => `<script>\n${s}\n</script>`).join('\n');
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', `${combinedScripts}\n</body>`);
+    } else {
+      html += `\n${combinedScripts}`;
+    }
+  }
+  return html;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -16,12 +47,13 @@ async function startServer() {
   app.get(['/app-bundle.html', '/Mon_Exposition_Fossiles.html'], (req, res) => {
     const distPath = path.join(process.cwd(), 'dist', 'index.html');
     const publicBundle = path.join(process.cwd(), 'public', 'Mon_Exposition_Fossiles.html');
-    if (fs.existsSync(distPath)) {
+    let targetPath = fs.existsSync(distPath) ? distPath : (fs.existsSync(publicBundle) ? publicBundle : null);
+    
+    if (targetPath) {
+      const raw = fs.readFileSync(targetPath, 'utf8');
+      const sanitized = sanitizeStandaloneHtml(raw);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.sendFile(distPath);
-    } else if (fs.existsSync(publicBundle)) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.sendFile(publicBundle);
+      return res.send(sanitized);
     } else {
       res.status(404).send("Bundle in preparation");
     }
@@ -105,6 +137,9 @@ async function startServer() {
            html = html.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${bannerJson}</script>`);
          }
       }
+      
+      // Ensure all scripts are sanitized and compatible with local file opening (file://)
+      html = sanitizeStandaloneHtml(html);
       
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="Mon_Exposition_Fossiles.html"');

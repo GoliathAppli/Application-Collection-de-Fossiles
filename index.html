@@ -27,6 +27,26 @@
     <script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">{}</script>
     <script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">{}</script>
     <script>
+      // Safe storage wrapper for file:// protocols or restricted sandboxes
+      try {
+        var _k = '__test_storage__';
+        window.localStorage.setItem(_k, _k);
+        window.localStorage.removeItem(_k);
+      } catch (e) {
+        var _mem = {};
+        try {
+          Object.defineProperty(window, 'localStorage', {
+            value: {
+              getItem: function(k) { return _mem[k] || null; },
+              setItem: function(k, v) { _mem[k] = String(v); },
+              removeItem: function(k) { delete _mem[k]; },
+              clear: function() { _mem = {}; }
+            },
+            writable: true
+          });
+        } catch (polyErr) {}
+      }
+
       window.__INITIAL_DATA__ = null;
       window.__INITIAL_BANNER__ = null;
       try {
@@ -42,7 +62,7 @@
         }
       } catch (e) {}
       try {
-        var savedTheme = localStorage.getItem('app_theme') || 'dark';
+        var savedTheme = (window.localStorage && window.localStorage.getItem('app_theme')) || 'dark';
         if (savedTheme === 'light') {
           document.documentElement.classList.add('light');
           document.documentElement.classList.remove('dark');
@@ -53,31 +73,34 @@
       } catch (e) {}
 
       // Global early capture for PWA Install Prompt (before React component mounts)
-      window.__deferredPWAInstallPrompt = null;
-      window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        window.__deferredPWAInstallPrompt = e;
-        window.dispatchEvent(new CustomEvent('pwa_prompt_ready'));
-        console.log('[PWA] beforeinstallprompt captured successfully at boot');
-      });
+      try {
+        window.__deferredPWAInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function(e) {
+          e.preventDefault();
+          window.__deferredPWAInstallPrompt = e;
+          window.dispatchEvent(new CustomEvent('pwa_prompt_ready'));
+          console.log('[PWA] beforeinstallprompt captured successfully at boot');
+        });
+      } catch (e) {}
 
-      // Service Worker Registration for PWA Offline Support
-      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        var registerSW = function() {
-          navigator.serviceWorker.register('./sw.js', { scope: './' }).then(function(reg) {
-            console.log('[PWA] Service Worker registered with scope:', reg.scope);
-            // Check for updates
-            reg.update().catch(function() {});
-          }).catch(function(err) {
-            console.warn('[PWA] Service Worker registration failed:', err);
-          });
-        };
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-          registerSW();
-        } else {
-          window.addEventListener('DOMContentLoaded', registerSW);
+      // Service Worker Registration for PWA Offline Support (only on http / https)
+      try {
+        if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+          var registerSW = function() {
+            navigator.serviceWorker.register('./sw.js', { scope: './' }).then(function(reg) {
+              console.log('[PWA] Service Worker registered with scope:', reg.scope);
+              reg.update().catch(function() {});
+            }).catch(function(err) {
+              console.warn('[PWA] Service Worker registration failed:', err);
+            });
+          };
+          if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            registerSW();
+          } else {
+            window.addEventListener('DOMContentLoaded', registerSW);
+          }
         }
-      }
+      } catch (e) {}
     </script>
   </head>
   <body>
@@ -85,4 +108,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

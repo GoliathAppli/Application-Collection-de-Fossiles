@@ -471,6 +471,27 @@ export default function App() {
         }
       }
 
+      // Final client-side sanitization to guarantee standard classic scripts (runs without CORS / type=module block on file://)
+      htmlContent = htmlContent.replace(/<link[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+      htmlContent = htmlContent.replace(/<style([^>]*)crossorigin([^>]*)>/gi, '<style$1$2>');
+      const clientScripts: string[] = [];
+      htmlContent = htmlContent.replace(/<script\s+type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, body) => {
+        clientScripts.push(body);
+        return '';
+      });
+      htmlContent = htmlContent.replace(/<script[^>]*type=["']module["'][^>]*>([\s\S]*?)<\/script>/gi, (_, body) => {
+        clientScripts.push(body);
+        return '';
+      });
+      if (clientScripts.length > 0) {
+        const combined = clientScripts.map(s => `<script>\n${s}\n</script>`).join('\n');
+        if (htmlContent.includes('</body>')) {
+          htmlContent = htmlContent.replace('</body>', `${combined}\n</body>`);
+        } else {
+          htmlContent += `\n${combined}`;
+        }
+      }
+
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
