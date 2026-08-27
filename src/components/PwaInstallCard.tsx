@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, Check, Share, PlusSquare, Sparkles, FolderHeart } from 'lucide-react';
+import { Smartphone, Download, Check, Share, PlusSquare, Sparkles, FolderHeart, Info, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PwaInstallCardProps {
   isLight?: boolean;
@@ -11,6 +11,7 @@ export default function PwaInstallCard({ isLight = false }: PwaInstallCardProps)
   const [isIos, setIsIos] = useState(false);
   const [showIosGuide, setShowIosGuide] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const [showComparisonDetails, setShowComparisonDetails] = useState(false);
 
   useEffect(() => {
     // Check if already in standalone PWA mode
@@ -186,6 +187,79 @@ export default function PwaInstallCard({ isLight = false }: PwaInstallCardProps)
             )}
           </div>
         )}
+
+        {/* Informational comparison: PWA vs Standalone HTML file */}
+        <div className={`mt-4 border rounded-2xl overflow-hidden transition-all ${
+          isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#060B1A]/70 border-[#D4AF37]/20'
+        }`}>
+          <button
+            type="button"
+            onClick={() => setShowComparisonDetails(!showComparisonDetails)}
+            className={`w-full p-3.5 flex items-center justify-between text-left cursor-pointer transition-colors ${
+              isLight ? 'hover:bg-slate-100' : 'hover:bg-[#101A36]/80'
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs font-serif font-bold uppercase tracking-wider">
+              <Info size={15} className={isLight ? 'text-blue-600' : 'text-[#D4AF37]'} />
+              <span className={isLight ? 'text-slate-900' : 'text-slate-200'}>
+                Comprendre : Application PWA vs Fichier Autonome HTML
+              </span>
+            </div>
+            <div className={`p-1 rounded-lg ${isLight ? 'text-slate-600' : 'text-[#D4AF37]'}`}>
+              {showComparisonDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
+          </button>
+
+          {showComparisonDetails && (
+            <div className={`p-4 border-t text-xs space-y-3.5 leading-relaxed animate-fade-in ${
+              isLight ? 'border-slate-200 text-slate-700' : 'border-[#D4AF37]/15 text-slate-300'
+            }`}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* PWA description */}
+                <div className={`p-3.5 rounded-xl border space-y-2 ${
+                  isLight ? 'bg-white border-blue-200/80 shadow-sm' : 'bg-[#101A36]/70 border-blue-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 font-bold text-[12px] text-blue-500">
+                    <Smartphone size={15} className="shrink-0" />
+                    <span>Application Mobile (PWA)</span>
+                  </div>
+                  <ul className="space-y-1.5 text-[11px] list-disc list-inside">
+                    <li><strong>Usage :</strong> S'ajoute à votre écran d'accueil comme une application native, plein écran sans barre d'URL, rangeable dans vos dossiers.</li>
+                    <li><strong>Mode Hors-Ligne :</strong> Fonctionne hors-ligne grâce aux données mémorisées dans le <em>cache Web du navigateur</em>.</li>
+                    <li className="text-amber-500 font-medium">
+                      <span className="font-bold">⚠️ En cas d'effacement d'historique :</span> Si vous effacez les caches & données de navigation du navigateur alors que vous n'avez pas Internet, la PWA ne retrouvera plus ses fichiers temporaires tant qu'une connexion ne sera pas réactivée pour régénérer le cache.
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Standalone HTML description */}
+                <div className={`p-3.5 rounded-xl border space-y-2 ${
+                  isLight ? 'bg-white border-emerald-200/80 shadow-sm' : 'bg-[#101A36]/70 border-emerald-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 font-bold text-[12px] text-emerald-500">
+                    <ShieldCheck size={15} className="shrink-0" />
+                    <span>Fichier HTML Autonome (.html)</span>
+                  </div>
+                  <ul className="space-y-1.5 text-[11px] list-disc list-inside">
+                    <li><strong>Usage :</strong> Véritable fichier physique indépendant stocké dans votre dossier <em>Téléchargements</em> ou <em>Documents</em> de votre téléphone ou PC.</li>
+                    <li><strong>Indestructible face au nettoyage :</strong> Même si vous videz 100 % de l'historique et des données de navigation sans aucun réseau Internet, le fichier physique reste intact sur votre disque.</li>
+                    <li><strong>Zéro dépendance :</strong> S'ouvre directement par simple clic sans jamais avoir besoin d'Internet ni d'installation.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Recommendation note */}
+              <div className={`p-3 rounded-xl border flex items-start gap-2.5 text-[11px] font-medium ${
+                isLight ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+              }`}>
+                <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-500" />
+                <p>
+                  <strong>Conseil pratique :</strong> Utilisez l'<strong>Application Mobile PWA</strong> au quotidien pour son confort sur smartphone, et conservez une copie du <strong>Fichier HTML Autonome</strong> dans vos fichiers personnels comme sauvegarde permanente à toute épreuve.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

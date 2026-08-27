@@ -789,14 +789,15 @@ export default function App() {
                 Téléchargez l'application complète compilée en <strong>un seul et unique fichier HTML</strong> (<code className={`font-mono text-xs ${isLight ? 'bg-slate-100 px-1 py-0.5 rounded text-black font-bold' : 'text-[#D4AF37]'}`}>Mon_Exposition_Fossiles.html</code>).
               </p>
               
-              <div className={`p-4 rounded-2xl border text-xs space-y-1.5 ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-[#060B1A]/60 border-[#D4AF37]/15 text-slate-300'}`}>
+              <div className={`p-4 rounded-2xl border text-xs space-y-2 ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-[#060B1A]/60 border-[#D4AF37]/15 text-slate-300'}`}>
                 <div className={`font-serif uppercase tracking-wider font-bold text-[11px] mb-1 flex items-center gap-1.5 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>
-                  💡 Pourquoi utiliser cette version autonome ?
+                  💡 Pourquoi conserver cette version autonome ?
                 </div>
-                <ul className="list-disc list-inside space-y-1 pl-1">
-                  <li><strong>Zéro connexion requise</strong> : fonctionne partout (au musée, en voyage, sur le terrain, sans réseau 4G/5G ni Wi-Fi).</li>
-                  <li><strong>Autonomie totale</strong> : tout est embarqué dans le fichier unique (toutes vos fiches de fossiles, vos photographies, l'échelle des temps géologiques et les fiches techniques).</li>
-                  <li><strong>Universel & Durable</strong> : il vous suffit de double-cliquer sur le fichier pour l'ouvrir dans Chrome, Safari, Firefox ou Edge sur PC, Mac, tablette ou smartphone.</li>
+                <ul className="list-disc list-inside space-y-1.5 pl-1">
+                  <li><strong>Résistance totale au nettoyage du navigateur :</strong> Même si vous videz 100 % de l'historique, des cookies ou des données en cache de Chrome/Safari sans réseau Internet, ce fichier physique reste intact dans vos <em>Documents</em> ou sur une clé USB et continue de fonctionner.</li>
+                  <li><strong>Zéro connexion requise :</strong> Fonctionne partout (au musée, en voyage, sur le terrain, sans réseau 4G/5G ni Wi-Fi).</li>
+                  <li><strong>Autonomie totale :</strong> Tout est embarqué dans le fichier unique (toutes vos fiches de fossiles, vos photographies, l'échelle des temps géologiques et les fiches techniques).</li>
+                  <li><strong>Universel & Durable :</strong> Il vous suffit de double-cliquer sur le fichier pour l'ouvrir dans n'importe quel navigateur (Chrome, Safari, Firefox, Edge) sur PC, Mac, tablette ou smartphone.</li>
                 </ul>
               </div>
             </div>
