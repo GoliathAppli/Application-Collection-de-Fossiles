@@ -52,6 +52,15 @@
         }
       } catch (e) {}
 
+      // Global early capture for PWA Install Prompt (before React component mounts)
+      window.__deferredPWAInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__deferredPWAInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa_prompt_ready'));
+        console.log('[PWA] beforeinstallprompt captured successfully at boot');
+      });
+
       // Service Worker Registration for PWA Offline Support
       if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         window.addEventListener('load', function() {
