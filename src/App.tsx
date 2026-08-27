@@ -48,18 +48,14 @@ export default function App() {
   // Theme & sound state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = (safeStorage.getItem('app_theme') as 'light' | 'dark') || 'dark';
-    if (typeof document !== 'undefined') {
+    if (typeof document !== 'undefined' && document.documentElement) {
       const root = document.documentElement;
       if (saved === 'light') {
         root.classList.add('light');
         root.classList.remove('dark');
-        document.body.classList.add('light');
-        document.body.classList.remove('dark');
       } else {
         root.classList.add('dark');
         root.classList.remove('light');
-        document.body.classList.add('dark');
-        document.body.classList.remove('light');
       }
     }
     return saved;
@@ -74,33 +70,51 @@ export default function App() {
     const targetTheme = nextTheme || (theme === 'light' ? 'dark' : 'light');
     setTheme(targetTheme);
     safeStorage.setItem('app_theme', targetTheme);
-    const root = document.documentElement;
-    if (targetTheme === 'light') {
-      root.classList.add('light');
-      root.classList.remove('dark');
-      document.body.classList.add('light');
-      document.body.classList.remove('dark');
-    } else {
-      root.classList.add('dark');
-      root.classList.remove('light');
-      document.body.classList.add('dark');
-      document.body.classList.remove('light');
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (root) {
+        if (targetTheme === 'light') {
+          root.classList.add('light');
+          root.classList.remove('dark');
+        } else {
+          root.classList.add('dark');
+          root.classList.remove('light');
+        }
+      }
+      if (document.body) {
+        if (targetTheme === 'light') {
+          document.body.classList.add('light');
+          document.body.classList.remove('dark');
+        } else {
+          document.body.classList.add('dark');
+          document.body.classList.remove('light');
+        }
+      }
     }
   };
 
   // Apply theme to document body
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'light') {
-      root.classList.add('light');
-      root.classList.remove('dark');
-      document.body.classList.add('light');
-      document.body.classList.remove('dark');
-    } else {
-      root.classList.add('dark');
-      root.classList.remove('light');
-      document.body.classList.add('dark');
-      document.body.classList.remove('light');
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (root) {
+        if (theme === 'light') {
+          root.classList.add('light');
+          root.classList.remove('dark');
+        } else {
+          root.classList.add('dark');
+          root.classList.remove('light');
+        }
+      }
+      if (document.body) {
+        if (theme === 'light') {
+          document.body.classList.add('light');
+          document.body.classList.remove('dark');
+        } else {
+          document.body.classList.add('dark');
+          document.body.classList.remove('light');
+        }
+      }
     }
     safeStorage.setItem('app_theme', theme);
   }, [theme]);
@@ -113,44 +127,66 @@ export default function App() {
   const [dirPermissionGranted, setDirPermissionGranted] = useState(true);
 
   useEffect(() => {
-    getFossils().then(async (data) => {
-      setFossils(data);
-      
-      // Load last active fossil
-      const lastId = await getLastActiveFossilId();
-      const autoOpenSetting = await getAutoOpenSetting();
-      setAutoOpen(autoOpenSetting);
+    let isMounted = true;
 
-      if (lastId) {
-        const found = data.find(f => f.id === lastId);
-        if (found) {
-          setLastFossil(found);
-          // If autoOpen is set to true, navigate straight to it
-          if (autoOpenSetting) {
-            setEditingFossil(found);
-            setSelectedPeriod(found.period as Period);
-            setCurrentView('form');
-          }
-        }
-      }
-
-      // Check for saved local directory handle
-      const savedHandle = await getDirectoryHandle();
-      if (savedHandle) {
-        setDirHandle(savedHandle);
+    async function initApp() {
+      try {
+        const data = await getFossils();
+        if (!isMounted) return;
+        setFossils(data || []);
+        
         try {
-          const queryResult = await savedHandle.queryPermission({ mode: 'readwrite' });
-          setDirPermissionGranted(queryResult === 'granted');
+          const lastId = await getLastActiveFossilId();
+          const autoOpenSetting = await getAutoOpenSetting();
+          if (isMounted) setAutoOpen(autoOpenSetting);
+
+          if (lastId && data) {
+            const found = data.find(f => f.id === lastId);
+            if (found && isMounted) {
+              setLastFossil(found);
+              if (autoOpenSetting) {
+                setEditingFossil(found);
+                setSelectedPeriod(found.period as Period);
+                setCurrentView('form');
+              }
+            }
+          }
         } catch (e) {
-          console.error("Error querying directory permission", e);
+          console.warn("Notice loading last active fossil:", e);
         }
+
+        try {
+          const savedHandle = await getDirectoryHandle();
+          if (savedHandle && isMounted) {
+            setDirHandle(savedHandle);
+            try {
+              const queryResult = await savedHandle.queryPermission({ mode: 'readwrite' });
+              if (isMounted) setDirPermissionGranted(queryResult === 'granted');
+            } catch (e) {
+              console.warn("Error querying directory permission:", e);
+            }
+          }
+        } catch (e) {
+          console.warn("Notice loading directory handle:", e);
+        }
+      } catch (err) {
+        console.error("Critical error during app startup:", err);
       }
-    });
 
-    getHomeImage().then(img => {
-      if (img) setBannerImage(img);
-    });
+      try {
+        const img = await getHomeImage();
+        if (img && isMounted) setBannerImage(img);
+      } catch (_) {}
+    }
 
+    initApp();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     // Hidden trigger to compile and download standalone HTML without public buttons
     const params = new URLSearchParams(window.location.search);
     if (params.get('compile-app') === 'true' || params.get('download-standalone') === 'true') {

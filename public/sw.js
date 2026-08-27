@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fossil-collection-pwa-v5';
+const CACHE_NAME = 'fossil-collection-pwa-v6';
 
 const CRITICAL_PWA_ASSETS = [
   './',
