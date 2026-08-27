@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fossil-collection-pwa-v2';
+const CACHE_NAME = 'fossil-collection-pwa-v5';
 
 const CRITICAL_PWA_ASSETS = [
   './',
@@ -13,14 +13,14 @@ const CRITICAL_PWA_ASSETS = [
   './apple-touch-icon.png'
 ];
 
-// Install Event - Precache the single-file offline bundle & core assets
+// Install Event - Precache core assets
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
 
-      // Attempt to load the fully inlined standalone bundle first
+      // Attempt to load the fully inlined standalone bundle
       try {
         const bundleResp = await fetch('./app-bundle.html', { cache: 'no-cache' }).catch(() => null)
           || await fetch('./Mon_Exposition_Fossiles.html', { cache: 'no-cache' }).catch(() => null)
@@ -33,8 +33,7 @@ self.addEventListener('install', (event) => {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
           });
 
-          // Store the complete singlefile bundle under multiple navigation keys
-          await Promise.all([
+          await Promise.allSettled([
             cache.put('/', createHtmlResponse()),
             cache.put('./', createHtmlResponse()),
             cache.put('/index.html', createHtmlResponse()),
@@ -45,7 +44,7 @@ self.addEventListener('install', (event) => {
             cache.put('./Mon_Exposition_Fossiles.html', createHtmlResponse()),
             cache.put(self.registration.scope, createHtmlResponse())
           ]);
-          console.log('[SW] Standalone single-file offline bundle cached successfully.');
+          console.log('[SW] Standalone offline bundle cached successfully.');
         }
       } catch (err) {
         console.warn('[SW] Notice during offline bundle caching:', err);
@@ -76,6 +75,7 @@ self.addEventListener('activate', (event) => {
       await Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', key);
             return caches.delete(key);
           }
         })
@@ -95,8 +95,16 @@ self.addEventListener('fetch', (event) => {
   // Skip browser extensions & non-http protocols
   if (!url.protocol.startsWith('http')) return;
 
-  // For API endpoints, do not cache with Service Worker
-  if (url.pathname.includes('/api/')) {
+  // For API endpoints and Vite dev server files, NEVER intercept with SW
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.searchParams.has('t') ||
+    url.searchParams.has('v') ||
+    url.searchParams.has('import')
+  ) {
     return;
   }
 
@@ -180,3 +188,4 @@ self.addEventListener('fetch', (event) => {
     })()
   );
 });
+
