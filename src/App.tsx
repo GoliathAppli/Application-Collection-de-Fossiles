@@ -481,38 +481,34 @@ export default function App() {
 
       // Inject the current data and banner if needed (when not already injected by backend)
       if (!alreadyInjected) {
-        const safeDataJson = dataStr.replace(/<\/script/gi, '<\\/script');
-        if (htmlContent.includes('id="__FOSSIL_APP_INITIAL_DATA__"')) {
+        const safeDataJson = dataStr.split('</' + 'script').join('<\\/' + 'script');
+        const scriptDataTag = '<' + 'script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">' + safeDataJson + '</' + 'script>';
+        if (htmlContent.indexOf('id="__FOSSIL_APP_INITIAL_DATA__"') !== -1) {
           htmlContent = htmlContent.replace(
-            /<script id="__FOSSIL_APP_INITIAL_DATA__" type="application\/json">[\s\S]*?<\/script>/,
-            () => `<script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`
+            new RegExp('<' + 'script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">[\\s\\S]*?</' + 'script>'),
+            () => scriptDataTag
           );
-        } else if (htmlContent.includes('window.__INITIAL_DATA__ = null;')) {
+        } else if (htmlContent.indexOf('window.__INITIAL_DATA__ = null;') !== -1) {
           htmlContent = htmlContent.replace('window.__INITIAL_DATA__ = null;', () => `window.__INITIAL_DATA__ = ${safeDataJson};`);
         } else {
-          htmlContent = htmlContent.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`);
+          htmlContent = htmlContent.replace('<head>', () => `<head>${scriptDataTag}`);
         }
 
         if (homeImg) {
-          const safeBannerJson = JSON.stringify(homeImg).replace(/<\/script/gi, '<\\/script');
-          if (htmlContent.includes('id="__FOSSIL_APP_INITIAL_BANNER__"')) {
+          const safeBannerJson = JSON.stringify(homeImg).split('</' + 'script').join('<\\/' + 'script');
+          const scriptBannerTag = '<' + 'script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">' + safeBannerJson + '</' + 'script>';
+          if (htmlContent.indexOf('id="__FOSSIL_APP_INITIAL_BANNER__"') !== -1) {
             htmlContent = htmlContent.replace(
-              /<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application\/json">[\s\S]*?<\/script>/,
-              () => `<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${safeBannerJson}</script>`
+              new RegExp('<' + 'script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">[\\s\\S]*?</' + 'script>'),
+              () => scriptBannerTag
             );
-          } else if (htmlContent.includes('window.__INITIAL_BANNER__ = null;')) {
+          } else if (htmlContent.indexOf('window.__INITIAL_BANNER__ = null;') !== -1) {
             htmlContent = htmlContent.replace('window.__INITIAL_BANNER__ = null;', () => `window.__INITIAL_BANNER__ = ${safeBannerJson};`);
           } else {
-            htmlContent = htmlContent.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${safeBannerJson}</script>`);
+            htmlContent = htmlContent.replace('<head>', () => `<head>${scriptBannerTag}`);
           }
         }
       }
-
-      // Final client-side sanitization to guarantee standard classic scripts (runs without CORS / type=module block on file://)
-      htmlContent = htmlContent.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
-      htmlContent = htmlContent.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
-      htmlContent = htmlContent.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
-      htmlContent = htmlContent.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);

@@ -5,38 +5,17 @@ import fs from 'fs';
 import { defineConfig, Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-function sanitizeStandaloneHtml(rawHtml: string): string {
-  let html = rawHtml;
-
-  // 1. Remove modulepreload link tags which fail on file:// or offline sandboxes
-  html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
-
-  // 2. Remove crossorigin attribute from style, script, and link tags to allow local file:// execution
-  html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
-  html = html.replace(/<link\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<link$1$2>');
-
-  // 3. Convert <script type="module"> into standard classic <script> to guarantee execution on file:// and all browsers
-  html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
-  html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
-
-  return html;
-}
-
-function standaloneCompatibilityPlugin(): Plugin {
+function standaloneCopyPlugin(): Plugin {
   return {
-    name: 'standalone-compatibility-plugin',
+    name: 'standalone-copy-plugin',
     closeBundle() {
       try {
         const distIndexPath = path.resolve(__dirname, 'dist', 'index.html');
         if (!fs.existsSync(distIndexPath)) return;
 
-        let html = fs.readFileSync(distIndexPath, 'utf8');
-        html = sanitizeStandaloneHtml(html);
+        const html = fs.readFileSync(distIndexPath, 'utf8');
 
-        // Write back to dist/index.html
-        fs.writeFileSync(distIndexPath, html, 'utf8');
-
-        // Also copy to public/Mon_Exposition_Fossiles.html and public/app-bundle.html
+        // Copy to public/Mon_Exposition_Fossiles.html and root Mon_Exposition_Fossiles.html
         const publicDir = path.resolve(__dirname, 'public');
         if (!fs.existsSync(publicDir)) {
           fs.mkdirSync(publicDir, { recursive: true });
@@ -44,9 +23,9 @@ function standaloneCompatibilityPlugin(): Plugin {
         fs.writeFileSync(path.resolve(publicDir, 'Mon_Exposition_Fossiles.html'), html, 'utf8');
         fs.writeFileSync(path.resolve(publicDir, 'app-bundle.html'), html, 'utf8');
         fs.writeFileSync(path.resolve(__dirname, 'Mon_Exposition_Fossiles.html'), html, 'utf8');
-        console.log('[Standalone] Mon_Exposition_Fossiles.html successfully prepared for offline/file:// usage.');
+        console.log('[Standalone] Mon_Exposition_Fossiles.html generated successfully.');
       } catch (err) {
-        console.warn('[Standalone] Post-processing notice:', err);
+        console.warn('[Standalone] Copy notice:', err);
       }
     }
   };
@@ -54,12 +33,21 @@ function standaloneCompatibilityPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    mode: 'production',
     base: './',
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
+    build: {
+      minify: 'esbuild' as const,
+      cssMinify: true,
+      sourcemap: false,
+    },
     plugins: [
       react(),
       tailwindcss(),
-      viteSingleFile({ removeViteModuleLoader: true, useRecommendedBuildConfig: true }),
-      standaloneCompatibilityPlugin()
+      viteSingleFile(),
+      standaloneCopyPlugin()
     ],
     resolve: {
       alias: {

@@ -4,23 +4,6 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { exec } from "child_process";
 
-function sanitizeStandaloneHtml(rawHtml: string): string {
-  let html = rawHtml;
-
-  // 1. Remove modulepreload link tags which fail on file:// or offline sandboxes
-  html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
-
-  // 2. Remove crossorigin attribute from style, script, and link tags to allow local file:// execution
-  html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
-  html = html.replace(/<link\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<link$1$2>');
-
-  // 3. Convert <script type="module"> into standard classic <script> to guarantee execution on file:// and all browsers
-  html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
-  html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
-
-  return html;
-}
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -37,9 +20,8 @@ async function startServer() {
     
     if (targetPath) {
       const raw = fs.readFileSync(targetPath, 'utf8');
-      const sanitized = sanitizeStandaloneHtml(raw);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(sanitized);
+      return res.send(raw);
     } else {
       res.status(404).send("Bundle in preparation");
     }
@@ -83,17 +65,18 @@ async function startServer() {
       
       if (data) {
         let dataString = typeof data === 'string' ? data : JSON.stringify(data);
-        const safeDataJson = dataString.replace(/<\/script/gi, '<\\/script');
+        const safeDataJson = dataString.split('</' + 'script').join('<\\/' + 'script');
+        const scriptDataTag = '<' + 'script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">' + safeDataJson + '</' + 'script>';
         
-        if (html.includes('id="__FOSSIL_APP_INITIAL_DATA__"')) {
+        if (html.indexOf('id="__FOSSIL_APP_INITIAL_DATA__"') !== -1) {
           html = html.replace(
             /<script id="__FOSSIL_APP_INITIAL_DATA__" type="application\/json">[\s\S]*?<\/script>/,
-            () => `<script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`
+            () => scriptDataTag
           );
-        } else if (html.includes('window.__INITIAL_DATA__ = null;')) {
+        } else if (html.indexOf('window.__INITIAL_DATA__ = null;') !== -1) {
           html = html.replace('window.__INITIAL_DATA__ = null;', () => `window.__INITIAL_DATA__ = ${safeDataJson};`);
         } else {
-          html = html.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_DATA__" type="application/json">${safeDataJson}</script>`);
+          html = html.replace('<head>', () => `<head>${scriptDataTag}`);
         }
       }
       
@@ -111,21 +94,19 @@ async function startServer() {
       }
       
       if (bannerContent) {
-         const bannerJson = JSON.stringify(bannerContent).replace(/<\/script/gi, '<\\/script');
-         if (html.includes('id="__FOSSIL_APP_INITIAL_BANNER__"')) {
+         const bannerJson = JSON.stringify(bannerContent).split('</' + 'script').join('<\\/' + 'script');
+         const scriptBannerTag = '<' + 'script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">' + bannerJson + '</' + 'script>';
+         if (html.indexOf('id="__FOSSIL_APP_INITIAL_BANNER__"') !== -1) {
            html = html.replace(
              /<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application\/json">[\s\S]*?<\/script>/,
-             () => `<script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${bannerJson}</script>`
+             () => scriptBannerTag
            );
-         } else if (html.includes('window.__INITIAL_BANNER__ = null;')) {
+         } else if (html.indexOf('window.__INITIAL_BANNER__ = null;') !== -1) {
            html = html.replace('window.__INITIAL_BANNER__ = null;', () => `window.__INITIAL_BANNER__ = ${bannerJson};`);
          } else {
-           html = html.replace('<head>', () => `<head><script id="__FOSSIL_APP_INITIAL_BANNER__" type="application/json">${bannerJson}</script>`);
+           html = html.replace('<head>', () => `<head>${scriptBannerTag}`);
          }
       }
-      
-      // Ensure all scripts are sanitized and compatible with local file opening (file://)
-      html = sanitizeStandaloneHtml(html);
       
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="Mon_Exposition_Fossiles.html"');
