@@ -510,6 +510,12 @@ export default function App() {
         }
       }
 
+      // Convert module script and remove modulepreload to guarantee double-click file:// offline support
+      htmlContent = htmlContent.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+      htmlContent = htmlContent.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+      htmlContent = htmlContent.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
+      htmlContent = htmlContent.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
+
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

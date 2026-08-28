@@ -14,12 +14,17 @@ async function startServer() {
 
   // Explicit route to serve the complete self-contained offline bundle for PWA and offline precache
   app.get(['/app-bundle.html', '/Mon_Exposition_Fossiles.html'], (req, res) => {
-    const distPath = path.join(process.cwd(), 'dist', 'index.html');
+    const standalonePath = path.join(process.cwd(), 'dist', 'Mon_Exposition_Fossiles.html');
     const publicBundle = path.join(process.cwd(), 'public', 'Mon_Exposition_Fossiles.html');
-    let targetPath = fs.existsSync(distPath) ? distPath : (fs.existsSync(publicBundle) ? publicBundle : null);
+    const distPath = path.join(process.cwd(), 'dist', 'index.html');
+    
+    let targetPath = fs.existsSync(standalonePath) ? standalonePath : (fs.existsSync(publicBundle) ? publicBundle : (fs.existsSync(distPath) ? distPath : null));
     
     if (targetPath) {
-      const raw = fs.readFileSync(targetPath, 'utf8');
+      let raw = fs.readFileSync(targetPath, 'utf8');
+      raw = raw.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+      raw = raw.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+      raw = raw.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(raw);
     } else {
@@ -30,38 +35,35 @@ async function startServer() {
   app.post("/api/download-app", async (req, res) => {
     try {
       const { data, banner } = req.body;
+      const standalonePath = path.join(process.cwd(), 'dist', 'Mon_Exposition_Fossiles.html');
       const distPath = path.join(process.cwd(), 'dist', 'index.html');
       
       // Use pre-compiled bundle if available for instant download, or compile on demand if missing
-      if (!fs.existsSync(distPath)) {
+      if (!fs.existsSync(distPath) && !fs.existsSync(standalonePath)) {
         await new Promise<void>((resolve, reject) => {
           exec('npx vite build', { env: { ...process.env, NODE_ENV: 'production' } }, (err, stdout, stderr) => {
             if (err) {
               console.error("Vite build error during download-app:", stderr || err);
-              if (fs.existsSync(distPath)) return resolve();
+              if (fs.existsSync(distPath) || fs.existsSync(standalonePath)) return resolve();
               return reject(err);
-            }
-            try {
-              if (fs.existsSync(distPath)) {
-                fs.copyFileSync(distPath, path.join(process.cwd(), 'Mon_Exposition_Fossiles.html'));
-                const publicDir = path.join(process.cwd(), 'public');
-                if (fs.existsSync(publicDir)) {
-                  fs.copyFileSync(distPath, path.join(publicDir, 'Mon_Exposition_Fossiles.html'));
-                }
-              }
-            } catch (copyErr) {
-              console.warn("Notice during standalone file copy:", copyErr);
             }
             resolve();
           });
         });
       }
       
-      if (!fs.existsSync(distPath)) {
+      const sourceFile = fs.existsSync(standalonePath) ? standalonePath : (fs.existsSync(distPath) ? distPath : null);
+      if (!sourceFile) {
         return res.status(500).send("Erreur: Le fichier autonome n'a pas pu être compilé.");
       }
       
-      let html = fs.readFileSync(distPath, 'utf8');
+      let html = fs.readFileSync(sourceFile, 'utf8');
+      
+      // Guarantee classic script compatibility for double-click file:// execution
+      html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
+      html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
+      html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
+      html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
       
       if (data) {
         let dataString = typeof data === 'string' ? data : JSON.stringify(data);
