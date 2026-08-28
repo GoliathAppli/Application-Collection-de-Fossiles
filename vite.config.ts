@@ -11,8 +11,12 @@ function sanitizeStandaloneHtml(rawHtml: string): string {
   // 1. Remove modulepreload link tags which fail on file:// or offline sandboxes
   html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
 
-  // 2. Remove crossorigin attribute from style and script tags to allow local file:// execution
+  // 2. Remove crossorigin attribute from style, script, and link tags to allow local file:// execution
   html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
+  html = html.replace(/<link\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<link$1$2>');
+
+  // 3. Convert <script type="module"> into standard classic <script> to guarantee execution on file:// and all browsers
+  html = html.replace(/<script\b([^>]*)type=["']module["']([^>]*)>/gi, '<script$1$2>');
   html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
   return html;
