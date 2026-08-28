@@ -72,12 +72,18 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
 
 @media print {
   @page {
-    size: landscape;
+    size: auto;
     margin: 8mm 8mm 8mm 8mm;
+  }
+
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   html, body {
     background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
     color: #000000 !important;
     background-image: none !important;
     font-size: 10pt !important;
@@ -85,12 +91,21 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
     print-color-adjust: exact !important;
   }
 
-  * {
-    box-shadow: none !important;
-    text-shadow: none !important;
+  /* Force white background and black text on all non-image containers */
+  body *:not(img):not(svg):not(path) {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
   }
 
-  .print-avoid-break, tr {
+  /* Retain full color and crisp appearance for photos and images */
+  img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-width: 100% !important;
+    object-fit: contain !important;
+  }
+
+  .print-avoid-break, .print\:break-inside-avoid, tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }

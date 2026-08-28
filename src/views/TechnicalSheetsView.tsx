@@ -386,33 +386,33 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
         </div>
 
         {/* COMPACT & ELEGANT TABLE */}
-        <div className={`w-full overflow-x-auto border rounded-xl shadow-sm print:overflow-visible print:border-none print:shadow-none ${
+        <div className={`w-full overflow-x-auto border rounded-xl shadow-sm print:overflow-visible print:border-2 print:border-black print:rounded-lg print:shadow-none print:bg-white ${
           isLight ? 'bg-white border-slate-300 text-black' : 'bg-[#060B1A]/80 border-[#D4AF37]/25 text-white'
         }`}>
-          <table className={`w-full text-left border-collapse font-sans text-xs sm:text-sm print:text-[9pt] ${
+          <table className={`w-full text-left border-collapse font-sans text-xs sm:text-sm print:text-[9pt] print:bg-white ${
             isLight ? 'text-black' : 'text-white'
           }`}>
             <thead>
-              <tr className={`border-b font-serif uppercase tracking-wider text-xs ${
+              <tr className={`border-b font-serif uppercase tracking-wider text-xs print:bg-white print:border-b-2 print:border-black print:text-black ${
                 isLight 
-                  ? 'bg-slate-100 border-slate-300 text-black font-bold print:bg-slate-200' 
+                  ? 'bg-slate-100 border-slate-300 text-black font-bold' 
                   : 'bg-[#101A36] border-[#D4AF37]/30 text-[#D4AF37]'
               }`}>
-                <th className="py-2.5 px-3 w-48 sm:w-56 print:w-[22%]">Nom du fossile</th>
-                <th className="py-2.5 px-3 w-48 sm:w-56 print:w-[22%]">Provenance</th>
-                <th className="py-2.5 px-3 w-36 sm:w-44 print:w-[18%]">Datation & Période</th>
-                <th className="py-2.5 px-3 w-40 sm:w-48 print:w-[18%]">Acquisition</th>
-                <th className="py-2.5 px-3 w-28 sm:w-36 print:w-[10%]">Certificat</th>
-                <th className="py-2.5 px-3 w-24 sm:w-28 text-right print:w-[10%]">Prix (€)</th>
+                <th className="py-2.5 px-3 w-48 sm:w-56 print:w-[22%] print:py-2 print:text-black">Nom du fossile</th>
+                <th className="py-2.5 px-3 w-48 sm:w-56 print:w-[22%] print:py-2 print:text-black">Provenance</th>
+                <th className="py-2.5 px-3 w-36 sm:w-44 print:w-[18%] print:py-2 print:text-black">Datation & Période</th>
+                <th className="py-2.5 px-3 w-40 sm:w-48 print:w-[18%] print:py-2 print:text-black">Acquisition</th>
+                <th className="py-2.5 px-3 w-28 sm:w-36 print:w-[10%] print:py-2 print:text-black">Certificat</th>
+                <th className="py-2.5 px-3 w-24 sm:w-28 text-right print:w-[10%] print:py-2 print:text-black">Prix (€)</th>
                 {isEditing && <th className="py-2.5 px-2 w-10 text-center print:hidden"></th>}
               </tr>
             </thead>
 
-            <tbody>
+            <tbody className="print:bg-white">
               {sheets.map((sheet, index) => (
                 <tr 
                   key={sheet.id} 
-                  className={`border-b transition-colors print:border-black/20 ${
+                  className={`border-b transition-colors print:bg-white print:border-b print:border-black/30 print:text-black ${
                     isLight 
                       ? (index % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-100') + ' border-slate-200' 
                       : (index % 2 === 0 ? 'bg-[#060B1A]/40 hover:bg-[#101A36]/60' : 'bg-[#0a1229]/60 hover:bg-[#101A36]/80') + ' border-[#D4AF37]/10'
@@ -700,17 +700,15 @@ export default function TechnicalSheetsView({ onBack, isLight = false, fossils: 
 
             {/* Table Footer with Total summary row */}
             <tfoot>
-              <tr className={`border-t-2 font-serif ${
+              <tr className={`border-t-2 font-serif print:bg-white print:border-t-2 print:border-black print:text-black ${
                 isLight 
                   ? 'bg-slate-100 border-slate-400 text-black' 
                   : 'bg-[#0c142e] border-[#D4AF37]/50 text-white'
               }`}>
-                <td colSpan={5} className="py-3 px-3 font-bold uppercase tracking-wider text-xs sm:text-sm">
+                <td colSpan={5} className="py-3 px-3 font-bold uppercase tracking-wider text-xs sm:text-sm print:text-black">
                   Total collection ({sheets.length} spécimen{sheets.length > 1 ? 's' : ''})
                 </td>
-                <td className={`py-3 px-3 text-right font-serif font-black text-sm sm:text-base ${
-                  isLight ? 'text-black' : 'text-[#D4AF37]'
-                }`}>
+                <td className={`py-3 px-3 text-right font-serif font-black text-sm sm:text-base print:text-black`}>
                   {formatFossilPrice(totalValue)} €
                 </td>
                 {isEditing && <td className="print:hidden"></td>}

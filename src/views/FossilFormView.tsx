@@ -990,21 +990,47 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
       {/* Main Description */}
       {fossil.description && (
-        <div className={`border-2 p-8 md:p-12 relative rounded-3xl mt-12 shadow-xl ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
-          <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-8 py-2 border rounded-b-2xl shadow-md ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#101A36] border-[#D4AF37]/30'}`}>
-             <span className={`font-serif uppercase tracking-widest text-xl sm:text-2xl font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Description</span>
+        <div className={`border-2 p-8 md:p-12 relative rounded-3xl mt-12 shadow-xl print:m-0 print:mt-6 print:p-6 print:border-2 print:border-black print:rounded-xl print:bg-white print:text-black print:shadow-none print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+          <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-8 py-2 border rounded-b-2xl shadow-md print:static print:translate-x-0 print:translate-y-0 print:p-0 print:border-0 print:mb-4 print:shadow-none ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#101A36] border-[#D4AF37]/30'}`}>
+             <span className={`font-serif uppercase tracking-widest text-xl sm:text-2xl font-bold print:text-lg print:border-b-2 print:border-black print:pb-1 print:inline-block print:text-black ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Description</span>
           </div>
-          <p className={`font-sans text-lg leading-relaxed whitespace-pre-wrap mt-6 font-medium ${isLight ? 'text-black' : 'text-white/95'}`}>
+          <p className={`font-sans text-lg leading-relaxed whitespace-pre-wrap mt-6 print:mt-2 print:text-sm print:text-black font-medium ${isLight ? 'text-black' : 'text-white/95'}`}>
             {fossil.description}
           </p>
           {(fossil.descriptionImages || []).length > 0 && (
-            <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div className="mt-8 print:mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
               {(fossil.descriptionImages || []).map((img, i) => (
-                <div key={i} className={`border p-1 shadow-md rounded-xl overflow-hidden ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
-                  <img src={img} alt="" className="w-full h-32 object-contain cursor-pointer hover:scale-105 transition-all" onClick={() => setEnlargedImage(img)} />
+                <div key={i} className={`border p-1 shadow-md rounded-xl overflow-hidden print:border print:border-black print:rounded-lg print:p-1 print:bg-white ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
+                  <img src={img} alt="" className="w-full h-32 object-contain cursor-pointer hover:scale-105 transition-all print:h-28" onClick={() => setEnlargedImage(img)} />
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* PRINT-ONLY Geological Period & Dating Box (Ink-friendly structured black frame) */}
+      {(fossil.fossilDating || fossil.period || fossil.detailedPeriodStart) && (
+        <div className="hidden print:block border-2 border-black p-6 rounded-xl bg-white text-black print:break-inside-avoid my-6">
+          <h3 className="font-serif uppercase tracking-widest text-lg font-bold mb-3 border-b-2 border-black pb-1 inline-block text-black">
+            Période Géologique & Datation
+          </h3>
+          <div className="grid grid-cols-2 gap-4 text-xs font-sans">
+            <div className="p-2 border border-black rounded-lg">
+              <span className="font-bold text-black uppercase tracking-wider text-[10px] block">Datation</span>
+              <span className="text-sm font-semibold">{fossil.fossilDating || 'Non précisée'}</span>
+            </div>
+            <div className="p-2 border border-black rounded-lg">
+              <span className="font-bold text-black uppercase tracking-wider text-[10px] block">Ère & Période</span>
+              <span className="text-sm font-semibold">
+                {fossil.period ? `Ère ${fossil.period}` : ''} {fossil.detailedPeriodStart ? `• ${fossil.detailedPeriodStart}` : ''} {fossil.detailedPeriodEnd && fossil.detailedPeriodEnd !== fossil.detailedPeriodStart ? `à ${fossil.detailedPeriodEnd}` : ''}
+              </span>
+            </div>
+          </div>
+          {fossil.detailedPeriodStart && subPeriodsDetails[fossil.detailedPeriodStart] && (
+            <p className="text-xs font-sans text-black mt-3 leading-relaxed border-t border-black/30 pt-2">
+              <strong>Contexte paléontologique ({fossil.detailedPeriodStart}) :</strong> {subPeriodsDetails[fossil.detailedPeriodStart].desc}
+            </p>
           )}
         </div>
       )}
@@ -1198,15 +1224,15 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
          )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-1 print:gap-6">
         {/* Discovery & Setup */}
         {fossil.discoveryLocation && (
-           <div className="space-y-8">
-               <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-100 ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
-                  <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Lieu et date de découverte</h3>
-                  <p className={`font-sans mb-4 font-medium ${isLight ? 'text-black' : 'text-slate-200'}`}>{fossil.discoveryLocation}</p>
+           <div className="space-y-8 print:space-y-0">
+               <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-100 print:p-6 print:border-2 print:border-black print:rounded-xl print:bg-white print:text-black print:shadow-none print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+                  <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block print:text-lg print:border-black print:mb-3 print:pb-1 ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Lieu et date de découverte</h3>
+                  <p className={`font-sans mb-4 font-medium print:text-sm print:text-black ${isLight ? 'text-black' : 'text-slate-200'}`}>{fossil.discoveryLocation}</p>
                   
-                  <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
+                  <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 print:border print:border-black print:rounded-lg print:h-40 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
                     <MapErrorBoundary fallbackText="Carte indisponible">
                       <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full" zoomControl={true} dragging={true} scrollWheelZoom={true}>
                         <ChangeView lat={fossil.discoveryLat || 46.2276} lng={fossil.discoveryLng || 2.2137} zoom={fossil.discoveryLat ? 10 : 4} />
@@ -1221,42 +1247,42 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
 
         {/* Species */}
         {(fossil.animalOrigin || fossil.alimentation || fossil.speciesImages?.length || fossil.animalImage) ? (
-           <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-200 ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
-              <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
+           <div className={`border-2 p-8 text-center rounded-3xl shadow-xl animate-fade-in delay-200 print:p-6 print:border-2 print:border-black print:rounded-xl print:bg-white print:text-black print:shadow-none print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+              <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block print:text-lg print:border-black print:mb-3 print:pb-1 ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
                 Espèce {fossil.speciesType === 'vegetal' ? 'Végétale' : 'Animale'}
               </h3>
               
               {fossil.animalOrigin && (
-                <p className={`font-sans mb-6 whitespace-pre-wrap leading-relaxed border-b pb-6 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/20'}`}>{fossil.animalOrigin}</p>
+                <p className={`font-sans mb-6 whitespace-pre-wrap leading-relaxed border-b pb-6 font-medium print:text-sm print:text-black print:border-black/20 print:mb-3 print:pb-3 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/20'}`}>{fossil.animalOrigin}</p>
               )}
               
               {fossil.speciesType !== 'vegetal' && (fossil.alimentation || fossil.speciesSize) && (
-                <div className={`grid grid-cols-2 gap-4 mb-6 border-b pb-6 text-left ${isLight ? 'border-slate-200' : 'border-[#D4AF37]/20'}`}>
+                <div className={`grid grid-cols-2 gap-4 mb-6 border-b pb-6 text-left print:mb-3 print:pb-3 print:border-black/20 ${isLight ? 'border-slate-200' : 'border-[#D4AF37]/20'}`}>
                   {fossil.alimentation && (
                     <div>
-                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Alimentation</h4>
-                      <p className={`font-sans text-sm whitespace-pre-wrap font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.alimentation}</p>
+                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold print:text-black ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Alimentation</h4>
+                      <p className={`font-sans text-sm whitespace-pre-wrap font-medium print:text-black ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.alimentation}</p>
                     </div>
                   )}
                   {fossil.speciesSize && (
                     <div>
-                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Taille</h4>
-                      <p className={`font-sans text-sm font-medium ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.speciesSize}</p>
+                      <h4 className={`font-serif uppercase tracking-widest text-xs mb-2 font-bold print:text-black ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Taille</h4>
+                      <p className={`font-sans text-sm font-medium print:text-black ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>{fossil.speciesSize}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {(fossil.speciesImages && fossil.speciesImages.length > 0) || fossil.animalImage ? (
-                 <div className={`flex gap-4 overflow-x-auto pb-4 snap-x border p-2 rounded-2xl ${isLight ? 'border-slate-200 bg-slate-50' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
+                 <div className={`flex gap-4 overflow-x-auto pb-4 snap-x border p-2 rounded-2xl print:overflow-visible print:border-0 print:p-0 print:flex-wrap ${isLight ? 'border-slate-200 bg-slate-50' : 'border-[#D4AF37]/20 bg-[#060B1A]/50'}`}>
                    {fossil.animalImage && (!fossil.speciesImages || fossil.speciesImages.length === 0) && (
-                      <div className={`border shadow-md shrink-0 w-64 snap-center mx-auto rounded-xl p-1 overflow-hidden ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
-                         <img src={fossil.animalImage} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105" onClick={() => setEnlargedImage(fossil.animalImage)} />
+                      <div className={`border shadow-md shrink-0 w-64 snap-center mx-auto rounded-xl p-1 overflow-hidden print:w-48 print:border-black print:rounded-lg print:bg-white ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
+                         <img src={fossil.animalImage} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105 print:h-36" onClick={() => setEnlargedImage(fossil.animalImage)} />
                       </div>
                    )}
                    {fossil.speciesImages && fossil.speciesImages.map((img, i) => (
-                      <div key={i} className={`border shadow-md shrink-0 w-64 snap-center rounded-xl p-1 overflow-hidden ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
-                         <img src={img} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105" onClick={() => setEnlargedImage(img)} />
+                      <div key={i} className={`border shadow-md shrink-0 w-64 snap-center rounded-xl p-1 overflow-hidden print:w-48 print:border-black print:rounded-lg print:bg-white ${isLight ? 'border-slate-300 bg-white' : 'border-[#D4AF37]/30 bg-[#060B1A]'}`}>
+                         <img src={img} alt="Espèce" className="w-full h-48 object-contain cursor-pointer transition-transform hover:scale-105 print:h-36" onClick={() => setEnlargedImage(img)} />
                       </div>
                    ))}
                  </div>
@@ -1266,41 +1292,41 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
       </div>
 
      {(techSheet.dateAchat || techSheet.lieuAchat || techSheet.prix || techSheet.certificat || techSheet.typeSheet === 'prelevement') && (
-        <div className={`border-2 p-8 mt-8 rounded-3xl shadow-xl animate-fade-in delay-300 print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
+        <div className={`border-2 p-8 mt-8 rounded-3xl shadow-xl animate-fade-in delay-300 print:m-0 print:mt-6 print:p-6 print:border-2 print:border-black print:rounded-xl print:bg-white print:text-black print:shadow-none print:break-inside-avoid ${isLight ? 'bg-white border-slate-200 text-black' : 'bg-[#101A36]/60 border-[#D4AF37]/30 text-white'}`}>
            <div className="text-center">
-             <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
+             <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block print:text-lg print:border-black print:mb-3 print:pb-1 ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>
                {techSheet.typeSheet === 'prelevement' ? 'Fiche Technique : Prélèvement' : 'Fiche Technique : Achat'}
              </h3>
            </div>
            
            {techSheet.typeSheet === 'prelevement' ? (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="space-y-4 text-left">
-                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
+               <div className="space-y-4 text-left print:space-y-2">
+                  <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
                     <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Type :</span> Prélèvement (Découverte de terrain)
                   </p>
-                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+                  <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
                     <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Date de découverte :</span> {techSheet.datePrelevement || 'Non précisée'}
                   </p>
-                  <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
+                  <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}>
                     <span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu précis :</span> {techSheet.lieuPrelevement || 'Non précisé'}
                   </p>
                </div>
              </div>
            ) : (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4 text-left">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
+                <div className="space-y-4 text-left print:space-y-2">
                    {techSheet.dateAchat && (
-                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Date d'achat:</span> {techSheet.dateAchat}</p>
+                     <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Date d'achat:</span> {techSheet.dateAchat}</p>
                    )}
                    {techSheet.lieuAchat && (
-                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu d'achat:</span> {techSheet.lieuAchat}</p>
+                     <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Lieu d'achat:</span> {techSheet.lieuAchat}</p>
                    )}
                    {parseFossilPrice(techSheet.prix) > 0 ? (
-                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Prix d'achat:</span> {formatFossilPrice(techSheet.prix)} €</p>
+                     <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Prix d'achat:</span> {formatFossilPrice(techSheet.prix)} €</p>
                    ) : null}
                    {techSheet.certificat && (
-                     <p className={`font-sans border-b pb-2 font-medium ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Certificat d'authenticité:</span> {techSheet.certificat === 'oui' ? 'Oui' : 'Non'}</p>
+                     <p className={`font-sans border-b pb-2 font-medium print:text-sm print:text-black print:border-black/20 ${isLight ? 'text-black border-slate-200' : 'text-slate-200 border-[#D4AF37]/15'}`}><span className={`font-bold mr-2 ${isLight ? 'text-black' : 'text-[#D4AF37]'}`}>Certificat d'authenticité:</span> {techSheet.certificat === 'oui' ? 'Oui' : 'Non'}</p>
                    )}
                 </div>
                 {techSheet.certificat === 'oui' && techSheet.certificatPhoto && (
@@ -1308,7 +1334,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                       <img 
                          src={techSheet.certificatPhoto} 
                          alt="Certificat" 
-                         className={`max-w-xs max-h-48 object-contain cursor-pointer border rounded-xl shadow-md transition-transform hover:scale-105 ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/30'}`} 
+                         className={`max-w-xs max-h-48 object-contain cursor-pointer border rounded-xl shadow-md transition-transform hover:scale-105 print:border-black print:rounded-lg print:max-h-36 ${isLight ? 'border-slate-300' : 'border-[#D4AF37]/30'}`} 
                          onClick={() => setEnlargedImage(techSheet.certificatPhoto!)}
                       />
                    </div>

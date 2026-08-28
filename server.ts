@@ -6,34 +6,13 @@ import { exec } from "child_process";
 
 function sanitizeStandaloneHtml(rawHtml: string): string {
   let html = rawHtml;
-  // 1. Remove modulepreload link tags
+
+  // 1. Remove modulepreload link tags which fail on file:// or offline sandboxes
   html = html.replace(/<link\s+[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
 
-  // 2. Remove crossorigin from style tags
+  // 2. Remove crossorigin attribute from style and script tags to allow local file:// execution
   html = html.replace(/<style\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<style$1$2>');
-
-  // 3. Extract non-JSON scripts from head/body and position them cleanly at the end of <body> after <div id="root">
-  const scriptRegex = /<script\b(?![^>]*type=["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi;
-  const extractedScripts: string[] = [];
-
-  html = html.replace(scriptRegex, (match) => {
-    let cleanTag = match;
-    cleanTag = cleanTag.replace(/\s+type=["']module["']/gi, '');
-    cleanTag = cleanTag.replace(/\s+crossorigin(?:=["'][^"']*["'])?/gi, '');
-    cleanTag = cleanTag.replace(/\s+defer\b/gi, '');
-    cleanTag = cleanTag.replace(/\s+async\b/gi, '');
-    extractedScripts.push(cleanTag);
-    return '';
-  });
-
-  if (extractedScripts.length > 0) {
-    const combinedScripts = extractedScripts.join('\n');
-    if (html.includes('</body>')) {
-      html = html.replace('</body>', () => combinedScripts + '\n</body>');
-    } else {
-      html += '\n' + combinedScripts;
-    }
-  }
+  html = html.replace(/<script\b([^>]*)crossorigin(?:="[^"]*")?([^>]*)>/gi, '<script$1$2>');
 
   return html;
 }
