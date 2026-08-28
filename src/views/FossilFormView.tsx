@@ -69,6 +69,33 @@ const ChangeView = ({ lat, lng, zoom }: { lat: number; lng: number; zoom: number
   const map = useMap();
   const prevCoordsRef = useRef<{ lat: number; lng: number }>({ lat, lng });
 
+  // Handle map invalidation and resizing on print
+  useEffect(() => {
+    const handlePrint = () => {
+      try {
+        map.invalidateSize();
+        if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
+          map.setView([lat, lng], zoom, { animate: false });
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('beforeprint', handlePrint);
+    let mediaQuery: MediaQueryList | null = null;
+    try {
+      mediaQuery = window.matchMedia('print');
+      if (mediaQuery && mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', (e) => {
+          if (e.matches) handlePrint();
+        });
+      }
+    } catch (e) {}
+
+    return () => {
+      window.removeEventListener('beforeprint', handlePrint);
+    };
+  }, [lat, lng, zoom, map]);
+
   useEffect(() => {
     if (
       typeof lat === 'number' &&
@@ -1232,7 +1259,7 @@ export default function FossilFormView({ period, existingFossil, onSave, onBack,
                   <h3 className={`font-serif uppercase tracking-widest text-2xl font-bold mb-6 border-b pb-4 inline-block print:text-lg print:border-black print:mb-3 print:pb-1 ${isLight ? 'text-black border-slate-300' : 'text-[#D4AF37] border-[#D4AF37]/30'}`}>Lieu et date de découverte</h3>
                   <p className={`font-sans mb-4 font-medium print:text-sm print:text-black ${isLight ? 'text-black' : 'text-slate-200'}`}>{fossil.discoveryLocation}</p>
                   
-                  <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 print:border print:border-black print:rounded-lg print:h-40 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
+                  <div className={`w-full h-48 border rounded-2xl overflow-hidden relative z-0 print:border print:border-black print:rounded-lg print:w-full print:max-w-md print:mx-auto print:h-44 ${isLight ? 'bg-slate-100 border-slate-300' : 'bg-[#060B1A] border-[#D4AF37]/20'}`}>
                     <MapErrorBoundary fallbackText="Carte indisponible">
                       <MapContainer center={[fossil.discoveryLat || 46.2276, fossil.discoveryLng || 2.2137]} zoom={fossil.discoveryLat ? 10 : 4} className="w-full h-full" zoomControl={true} dragging={true} scrollWheelZoom={true}>
                         <ChangeView lat={fossil.discoveryLat || 46.2276} lng={fossil.discoveryLng || 2.2137} zoom={fossil.discoveryLat ? 10 : 4} />

@@ -97,12 +97,37 @@ html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
     color: #000000 !important;
   }
 
-  /* Retain full color and crisp appearance for photos and images */
-  img {
+  /* Retain full color and crisp appearance for photos and images, excluding leaflet map tiles/markers */
+  img:not(.leaflet-tile):not(.leaflet-marker-icon):not(.leaflet-marker-shadow) {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     max-width: 100% !important;
     object-fit: contain !important;
+  }
+
+  /* Leaflet Map printing rules: ensure tiles fill the whole container without distortion or clipping */
+  .leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
+    background: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .leaflet-container img,
+  .leaflet-tile,
+  .leaflet-tile-container img {
+    max-width: none !important;
+    max-height: none !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: initial !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .leaflet-control-container {
+    display: none !important; /* Hide zoom/layer controls in print */
   }
 
   .print-avoid-break, .print\:break-inside-avoid, tr {
